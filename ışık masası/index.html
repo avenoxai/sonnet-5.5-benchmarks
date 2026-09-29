@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<title>Işık Masası</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="overlay"></canvas>
+
+<header id="brand">
+  <h1>Işık Masası</h1>
+  <i class="spectrum-bar"></i>
+  <p>prizma · mercek · sabun köpüğü · elmas</p>
+</header>
+
+<nav id="scenes" class="card pill" aria-label="Hazır sahneler">
+  <button data-scene="karma" class="on">Karma</button>
+  <button data-scene="prizma">Prizma</button>
+  <button data-scene="mercek">Mercek</button>
+  <button data-scene="elmas">Elmas</button>
+  <button data-scene="kopuk">Köpük</button>
+</nav>
+
+<div id="topright">
+  <button id="btnSettings" class="card icon-btn" aria-label="Ayarlar" title="Ayarlar">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
+  </button>
+</div>
+
+<aside id="settings" class="card panel hidden">
+  <h3>Ayarlar</h3>
+  <div id="settingsBody"></div>
+</aside>
+
+<aside id="inspector" class="card panel hidden"></aside>
+
+<div id="dock" class="card">
+  <div class="grp">
+    <span class="cap">Işık</span>
+    <div class="tools">
+      <button class="tool" data-add="beam" title="Işın demeti (paralel beyaz ışık)">
+        <svg viewBox="0 0 32 32"><rect x="3.5" y="9" width="6" height="14" rx="1.5"/><path d="M13 12h16M13 16h16M13 20h16"/></svg><span>Işın</span></button>
+      <button class="tool" data-add="point" title="Nokta ışık">
+        <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="3.2"/><path d="M16 4v5M16 23v5M4 16h5M23 16h5M7.5 7.5l3.4 3.4M21.1 21.1l3.4 3.4M24.5 7.5l-3.4 3.4M10.9 21.1l-3.4 3.4"/></svg><span>Nokta</span></button>
+      <button class="tool" data-add="laser" title="Lazer (tek renk)">
+        <svg viewBox="0 0 32 32"><rect x="3" y="12.5" width="13" height="7" rx="2"/><path d="M16 16h13"/><circle cx="29" cy="16" r="1.4" fill="currentColor"/></svg><span>Lazer</span></button>
+    </div>
+  </div>
+  <i class="sep"></i>
+  <div class="grp">
+    <span class="cap">Nesne</span>
+    <div class="tools">
+      <button class="tool" data-add="prism" title="Prizma">
+        <svg viewBox="0 0 32 32"><path d="M16 5.5l11 19.5H5z"/><path d="M2 18l9-2.2M21.5 18.5l8.5-2M22.3 21l7.7 1.6M20.7 16.2l8.6-5.2"/></svg><span>Prizma</span></button>
+      <button class="tool" data-add="lens" title="Mercek">
+        <svg viewBox="0 0 32 32"><path d="M16 4c7.5 5.2 7.5 18.8 0 24-7.5-5.2-7.5-18.8 0-24z"/><path d="M16 4v24" opacity=".3"/></svg><span>Mercek</span></button>
+      <button class="tool" data-add="diamond" title="Elmas">
+        <svg viewBox="0 0 32 32"><path d="M9 7h14l6 7-13 14L3 14z"/><path d="M3 14h26M12.5 7l-3.5 7 7 14M19.5 7l3.5 7-7 14"/></svg><span>Elmas</span></button>
+      <button class="tool" data-add="bubble" title="Sabun köpüğü">
+        <svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="11"/><path d="M9.6 14a7 7 0 0 1 4.6-5.6"/><circle cx="21.5" cy="21.5" r="1.1" fill="currentColor" stroke="none"/></svg><span>Köpük</span></button>
+    </div>
+  </div>
+</div>
+
+<div id="hint">
+  <b>Sürükle</b> taşı · <b>Tekerlek</b> döndür · <b>Shift + tekerlek</b> boyutlandır · <b>Çift tık</b> köpüğü patlat · <b>Del</b> sil
+</div>
+
+<div id="fallback" hidden><p></p></div>
+
+<script src="js/spectrum.js"></script>
+<script src="js/scene.js"></script>
+<script src="js/trace.js"></script>
+<script src="js/glass.js"></script>
+<script src="js/gl.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

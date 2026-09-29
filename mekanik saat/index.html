@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>HOROS Kalibre 01 — Çalışan 3B Mekanik Kol Saati</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+  :root {
+    --bg0:#050506; --bg1:#17140f;
+    --ink:#ece6da; --dim:#a79f90; --faint:#6f695e;
+    --gold:#e0b56a; --gold2:#b98a4a; --line:rgba(224,181,106,.22);
+    --glass:rgba(16,14,11,.62);
+    --font:"SF Pro Text","Helvetica Neue",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --serif:"Didot","Bodoni 72","Playfair Display","Times New Roman",serif;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:radial-gradient(120% 90% at 35% 30%, #241f17 0%, #0c0b09 55%, #030303 100%); color:var(--ink); font-family:var(--font); }
+  canvas#gl { position:fixed; inset:0; width:100%; height:100%; display:block; outline:none; touch-action:none; }
+  #loading { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; z-index:50;
+    background:radial-gradient(120% 90% at 50% 40%, #1d1913 0%, #050505 80%); transition:opacity .8s ease; }
+  #loading .brand { font-family:var(--serif); letter-spacing:.42em; font-size:28px; color:var(--gold); padding-left:.42em; }
+  #loading .sub { font-size:12px; letter-spacing:.28em; color:var(--dim); text-transform:uppercase; }
+  #loading .bar { width:220px; height:2px; background:rgba(255,255,255,.08); overflow:hidden; border-radius:2px; }
+  #loading .bar i { display:block; height:100%; width:35%; background:linear-gradient(90deg,transparent,var(--gold),transparent); animation:slide 1.2s infinite ease-in-out; }
+  @keyframes slide { 0%{transform:translateX(-120%)} 100%{transform:translateX(320%)} }
+
+  .glass { background:var(--glass); backdrop-filter:blur(14px) saturate(1.2); -webkit-backdrop-filter:blur(14px) saturate(1.2);
+    border:1px solid var(--line); border-radius:14px; box-shadow:0 10px 40px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.04); }
+  #title { position:fixed; left:28px; top:22px; z-index:5; pointer-events:none; }
+  #title h1 { margin:0; font-family:var(--serif); font-weight:500; letter-spacing:.38em; font-size:26px; color:var(--gold); }
+  #title p { margin:6px 0 0; font-size:11px; letter-spacing:.22em; color:var(--dim); text-transform:uppercase; }
+
+  #readout { position:fixed; left:28px; top:92px; width:262px; padding:14px 16px 12px; z-index:5; }
+  #readout .clock { font-variant-numeric:tabular-nums; font-size:30px; font-weight:300; letter-spacing:.04em; color:var(--ink); }
+  #readout .clock small { font-size:13px; color:var(--dim); letter-spacing:.14em; margin-left:6px; }
+  .meter { margin-top:12px; }
+  .meter .row { display:flex; justify-content:space-between; font-size:11px; color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+  .meter .row b { color:var(--ink); font-weight:500; letter-spacing:.02em; text-transform:none; font-variant-numeric:tabular-nums; }
+  .meter .track { margin-top:5px; height:5px; border-radius:5px; background:rgba(255,255,255,.08); overflow:hidden; }
+  .meter .fill { height:100%; width:50%; border-radius:5px; background:linear-gradient(90deg,#8a5a1e,var(--gold)); transition:width .25s; }
+  .meter.amp .fill { background:linear-gradient(90deg,#3d5b8f,#8fb6f0); }
+  #readout .tick { margin-top:12px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+  #readout .dot { width:8px; height:8px; border-radius:50%; background:#3b342a; box-shadow:0 0 0 1px rgba(224,181,106,.3); }
+  #readout .dot.on { background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  #readout .state { margin-top:10px; font-size:11px; color:var(--gold); letter-spacing:.06em; min-height:14px; }
+
+  #panel { position:fixed; right:22px; top:22px; bottom:22px; width:312px; z-index:6; display:flex; flex-direction:column; overflow:hidden; transition:transform .45s cubic-bezier(.2,.8,.2,1), opacity .3s; }
+  #panel.hidden { transform:translateX(340px); opacity:0; pointer-events:none; }
+  #panel .scroll { overflow-y:auto; padding:6px 16px 16px; scrollbar-width:thin; scrollbar-color:#3a3325 transparent; }
+  #panel h3 { margin:18px 0 9px; font-size:10.5px; letter-spacing:.24em; text-transform:uppercase; color:var(--gold); font-weight:600; display:flex; align-items:center; gap:8px; }
+  #panel h3::after { content:""; flex:1; height:1px; background:var(--line); }
+  #toggle { position:fixed; right:22px; top:22px; z-index:7; padding:8px 12px; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink); cursor:pointer; display:none; }
+  #toggle.show { display:block; }
+  .btns { display:flex; flex-wrap:wrap; gap:6px; }
+  button.b { font:inherit; font-size:12px; color:var(--ink); background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.1); border-radius:8px; padding:7px 10px; cursor:pointer;
+    transition:all .18s; user-select:none; -webkit-user-select:none; }
+  button.b:hover { background:rgba(224,181,106,.14); border-color:var(--line); }
+  button.b.on { background:linear-gradient(180deg,rgba(224,181,106,.32),rgba(224,181,106,.16)); border-color:rgba(224,181,106,.6); color:#fff3dc; }
+  button.b.wide { flex:1 1 100%; text-align:center; }
+  button.b.half { flex:1 1 calc(50% - 6px); text-align:center; }
+  button.b.third { flex:1 1 calc(33% - 6px); text-align:center; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+  .sliderRow { display:flex; align-items:center; gap:10px; }
+  .sliderRow output { min-width:38px; text-align:right; font-variant-numeric:tabular-nums; font-size:12px; color:var(--gold); }
+  input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:26px; background:transparent; cursor:pointer; }
+  input[type=range]::-webkit-slider-runnable-track { height:4px; border-radius:4px; background:linear-gradient(90deg,var(--gold2) var(--p,0%),rgba(255,255,255,.12) var(--p,0%)); }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:18px; height:18px; margin-top:-7px; border-radius:50%; background:radial-gradient(circle at 35% 30%,#fff2d6,var(--gold) 55%,#8f6524); box-shadow:0 2px 8px rgba(0,0,0,.6); border:0; }
+  input[type=range]::-moz-range-track { height:4px; border-radius:4px; background:rgba(255,255,255,.12); }
+  input[type=range]::-moz-range-thumb { width:18px; height:18px; border-radius:50%; background:var(--gold); border:0; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip { font-size:11.5px; padding:5px 9px; border-radius:20px; border:1px solid rgba(255,255,255,.12); color:var(--dim); cursor:pointer; user-select:none; transition:all .15s; background:rgba(255,255,255,.03); }
+  .chip.on { color:var(--ink); border-color:rgba(224,181,106,.5); background:rgba(224,181,106,.13); }
+  .chip:hover { border-color:var(--line); }
+  .swatches { display:flex; gap:10px; }
+  .sw { width:30px; height:30px; border-radius:50%; cursor:pointer; border:2px solid rgba(255,255,255,.14); position:relative; transition:transform .15s; }
+  .sw:hover { transform:scale(1.1); }
+  .sw.on { border-color:var(--gold); box-shadow:0 0 0 2px rgba(224,181,106,.25); }
+  .note { font-size:11.5px; line-height:1.5; color:var(--dim); margin:8px 0 0; }
+  .note b { color:var(--ink); font-weight:500; }
+
+  #info { position:fixed; left:50%; bottom:22px; transform:translate(-50%, 20px); width:min(560px, calc(100vw - 720px)); min-width:360px; padding:16px 20px 16px; z-index:6; opacity:0; pointer-events:none; transition:all .35s cubic-bezier(.2,.8,.2,1); }
+  #info.show { opacity:1; transform:translate(-50%,0); pointer-events:auto; }
+  #info h2 { margin:0 0 6px; font-family:var(--serif); font-weight:500; font-size:20px; letter-spacing:.06em; color:var(--gold); padding-right:26px; }
+  #info p { margin:0; font-size:13px; line-height:1.55; color:#d8d1c3; }
+  #info .specs { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; }
+  #info .specs span { font-size:11px; color:var(--dim); letter-spacing:.04em; }
+  #info .specs b { color:var(--ink); font-weight:500; margin-left:4px; }
+  #info .x { position:absolute; right:10px; top:8px; width:26px; height:26px; border-radius:50%; text-align:center; line-height:24px; cursor:pointer; color:var(--dim); font-size:16px; }
+  #info .x:hover { color:var(--ink); background:rgba(255,255,255,.08); }
+  .lbl { position:fixed; left:0; top:0; z-index:4; pointer-events:none; opacity:0; transition:opacity .25s; font-size:11.5px; letter-spacing:.04em; color:var(--ink); white-space:nowrap; display:flex; align-items:center; gap:0; will-change:transform; }
+  .lbl i { width:7px; height:7px; border-radius:50%; background:var(--gold); box-shadow:0 0 0 3px rgba(224,181,106,.22); margin-left:-3px; flex:none; }
+  .lbl span { margin-left:22px; padding:3px 8px; background:rgba(12,10,8,.72); border:1px solid var(--line); border-radius:6px; position:relative; }
+  .lbl span::before { content:""; position:absolute; left:-20px; top:50%; width:20px; height:1px; background:linear-gradient(90deg,var(--gold),rgba(224,181,106,.3)); }
+  .lbl.left { flex-direction:row-reverse; }
+  .lbl.left i { margin-left:0; margin-right:-3px; }
+  .lbl.left span { margin-left:0; margin-right:22px; }
+  .lbl.left span::before { left:auto; right:-20px; background:linear-gradient(270deg,var(--gold),rgba(224,181,106,.3)); }
+  #tip { position:fixed; z-index:9; pointer-events:none; padding:5px 10px; font-size:12px; background:rgba(10,9,7,.86); border:1px solid var(--line); border-radius:7px; color:var(--ink); transform:translate(14px,16px); opacity:0; transition:opacity .12s; white-space:nowrap; }
+  #tip.show { opacity:1; }
+  #hint { position:fixed; left:28px; bottom:22px; z-index:4; font-size:11.5px; line-height:1.7; color:var(--faint); letter-spacing:.03em; pointer-events:none; }
+  #hint kbd { font:inherit; color:var(--dim); border:1px solid rgba(255,255,255,.14); border-radius:4px; padding:0 5px; }
+  #chain { position:fixed; left:50%; top:22px; transform:translateX(-50%); z-index:5; display:flex; gap:4px; padding:7px 12px; opacity:0; transition:opacity .4s; pointer-events:none; }
+  #chain.show { opacity:1; }
+  #chain span { font-size:11px; letter-spacing:.06em; color:var(--faint); padding:3px 8px; border-radius:6px; transition:all .25s; white-space:nowrap; }
+  #chain span.on { color:#1a1408; background:var(--gold); }
+  #chain i { color:var(--faint); font-style:normal; align-self:center; }
+  @media (max-width: 1100px) { #info { width:calc(100vw - 40px); bottom:74px; } #hint { display:none; } #readout { width:220px; } }
+  @media (max-width: 780px) { #panel { width:min(312px, calc(100vw - 30px)); } #readout { display:none; } }
+</style>
+</head>
+<body>
+<canvas id="gl" tabindex="0"></canvas>
+<div id="title"><h1>HOROS</h1><p>Kalibre 01 · Otomatik mekanik kol saati</p></div>
+<div id="loading"><div class="brand">HOROS</div><div class="sub">Mekanizma kuruluyor</div><div class="bar"><i></i></div></div>
+<div id="ui"></div>
+<div id="tip"></div>
+<script src="app.js"></script>
+</body>
+</html>

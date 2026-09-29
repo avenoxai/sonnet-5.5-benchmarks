@@ -1,0 +1,9 @@
+Generate one image, 1024x1024 PNG, high quality, fine detail.
+Use case: illustration-story.
+Asset: Square spot illustration for a Turkish YouTube benchmark presentation website (Avenox channel).
+Reference image 1 (/tmp/sunum-ref/limon.png) is the exact character identity and illustration-style reference. Reference image 2 (/tmp/sunum-ref/style.png) is ONLY a palette and paper-texture anchor; do not include its text or logo.
+Subject and composition: Limon stands on a small ink-drawn hill looking through a brass telescope at the sky, where two spiral galaxies drawn in halftone dots and ink swirl into each other with faint tidal tails. Centered composition, generous padding, lots of calm negative space.
+Style: flat 2D editorial print illustration matching reference image 1 exactly for the character: the Avenox Limon mascot, a tall pointed lemon with a long rectangular nose, heavy-lidded bored deadpan eyes, a small flat closed mouth, thin stick arms and legs, bold warm-black ink outline (#1B1712), risograph halftone dot shading on golden yellow (#E8B23A with #FFD23E highlights). Keep the exact same face, proportions and personality as reference 1: dry, unimpressed investigator energy.
+Background: warm ivory paper (#F3EFE4) with subtle paper grain. Restrained palette, mostly paper, ink and golden yellow. Honest soft shadows rendered with print stippling, human-made print craft.
+Banned: round lemon, leaves, bulging eyes, teeth, big fists, angry face, 3D render, glossy plastic, gradients, neon, purple or blue glow, glassmorphism, stock AI imagery.
+No text, no letters, no numbers, no logos, no watermark.

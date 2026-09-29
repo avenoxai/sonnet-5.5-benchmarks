@@ -1,0 +1,1 @@
+Tarayıcı sekmesinde, gözümün önünde sıfırdan bir dil modeli doğur, adı Limon olsun. Önce saçmalasın, dakikalar içinde Türkçe konuşmayı öğrensin; beynini de 3D göreyim. Hazır model yok, hazır kütüphane yok, bilgisayarımdaki dosyaları kullanma.

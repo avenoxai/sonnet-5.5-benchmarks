@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Perseverance — Mars'a İniş 3D Simülasyonu</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/hud.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud-root"></div>
+
+<div id="loading">
+  <div class="ld-inner">
+    <div class="ld-kicker">NASA · JPL · MARS 2020</div>
+    <h1>PERSEVERANCE</h1>
+    <div class="ld-sub">Mars'a iniş ve yere temas — 3D simülasyon</div>
+    <div class="ld-track"><div id="loading-bar"></div></div>
+    <div id="loading-msg">Başlatılıyor…</div>
+  </div>
+</div>
+
+<noscript>Bu simülasyon JavaScript ve WebGL2 gerektirir.</noscript>
+
+<script src="vendor/three.bundle.js"></script>
+<script src="js/core.js"></script>
+<!-- embedded data assets (base64 / json), each writes into EDL.data[...] -->
+<script src="assets/ba_poses.js"></script>
+<script src="assets/mosaic_meta.js"></script>
+<script src="assets/mosaic_wide_t42_100.js"></script>
+<script src="assets/mosaic_mid_t100_140.js"></script>
+<script src="assets/mosaic_fine_t140_164.js"></script>
+
+<script src="js/post.js"></script>
+<script src="js/flight.js"></script>
+<script src="js/atmosphere.js"></script>
+<script src="js/terrain.js"></script>
+<script src="js/rover.js"></script>
+<script src="js/descentStage.js"></script>
+<script src="js/capsule.js"></script>
+<script src="js/parachute.js"></script>
+<script src="js/cameras.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

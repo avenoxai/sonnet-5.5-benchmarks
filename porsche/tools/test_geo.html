@@ -1,0 +1,290 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>PG.geo contact sheet</title>
+<style>
+  html, body { margin: 0; background: #14161a; overflow: hidden; font-family: ui-monospace, Menlo, monospace; }
+  canvas { position: absolute; left: 0; top: 0; width: 100vw; height: 100vh; display: block; }
+  .lb { position: absolute; color: #d8dde6; font-size: 11px; line-height: 13px; text-shadow: 0 1px 2px #000; pointer-events: none; white-space: pre; }
+  .lb b { color: #fff; font-size: 12px; }
+  .ok { color: #7fdc8a; } .bad { color: #ff6b6b; }
+  #panel { position: absolute; left: 0; right: 0; bottom: 0; color: #cfd6e2; font-size: 12px; line-height: 15px; padding: 6px 10px; white-space: pre; background: rgba(10,12,16,.72); }
+</style></head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel"></div>
+<script src="../js/core.js"></script>
+<script src="../js/geo.js"></script>
+<script>
+// ------------------------------------------------------------------------------------------------------------------
+// Contact sheet for PG.geo.  URL params:  sheet=1..5  mode=shade|normals|uv  wire=0|1|only  size=WxH (cell grid, default 5x3)
+// Self-contained viewer (own WebGL2 program: Lambert + rim; does not use renderer.js).
+// ------------------------------------------------------------------------------------------------------------------
+const Q = new URLSearchParams(location.search);
+const G = PG.geo, m4 = PG.m4, PI = Math.PI, TAU = PI * 2, shapes = G.shapes;
+const SHEET = +(Q.get('sheet') || 1), MODE = Q.get('mode') || 'shade', WIRE = Q.get('wire') || '0';
+const [COLS, ROWS] = (Q.get('grid') || (SHEET === 5 ? '3x1' : '5x3')).split('x').map(Number);
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+if (!gl) { document.body.textContent = 'WebGL2 not available'; throw new Error('no webgl2'); }
+const results = { sheet: SHEET, items: [], failures: 0 };
+
+// ---------------------------------------------------------------- tiny renderer
+const VS = `#version 300 es
+in vec3 aPos; in vec3 aNrm; in vec2 aUv; uniform mat4 uVP;
+out vec3 vN; out vec3 vP; out vec2 vUv;
+void main(){ vN = aNrm; vP = aPos; vUv = aUv; gl_Position = uVP * vec4(aPos, 1.0); }`;
+const FS = `#version 300 es
+precision highp float; in vec3 vN; in vec3 vP; in vec2 vUv; out vec4 o;
+uniform vec3 uEye; uniform int uMode; uniform float uPeriod; uniform vec3 uColor;
+void main(){
+  vec3 n = normalize(vN); if (!gl_FrontFacing) n = -n;
+  vec3 v = normalize(uEye - vP);
+  if (uMode == 3) { o = vec4(uColor, 1.0); return; }
+  vec3 base = uColor;
+  if (uMode == 1) base = n * 0.5 + 0.5;
+  if (uMode == 2) { vec2 g = floor(vUv / uPeriod); float c = mod(g.x + g.y, 2.0); base = mix(vec3(0.85,0.87,0.9), vec3(0.18,0.2,0.26), c); base = mix(base, vec3(vUv.x/(uPeriod*8.0), vUv.y/(uPeriod*8.0), 0.55), 0.18); }
+  vec3 L1 = normalize(vec3(0.5, 0.85, 0.45)), L2 = normalize(vec3(-0.7, 0.2, -0.5));
+  float d1 = max(dot(n, L1), 0.0), d2 = max(dot(n, L2), 0.0);
+  float hemi = 0.5 + 0.5 * n.y;
+  vec3 col = base * (0.18 + 0.22 * hemi + 0.75 * d1 + 0.22 * d2);
+  float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0); col += vec3(0.35, 0.45, 0.6) * rim * 0.6;
+  vec3 h = normalize(L1 + v); col += vec3(1.0) * pow(max(dot(n, h), 0.0), 60.0) * 0.25;
+  if (!gl_FrontFacing) col = mix(col, vec3(1.0, 0.1, 0.1), 0.65);   // back faces (seen from inside) glow red
+  if (uMode == 1 && gl_FrontFacing) col = base * 0.9 + col * 0.1;
+  o = vec4(pow(col, vec3(1.0 / 2.2)), 1.0);
+}`;
+const prog = PG.glu.program(gl, VS, FS, 'geo-test'), U = PG.glu.uniforms(gl, prog);
+const LOC = { aPos: 0, aNrm: 1, aUv: 2 };
+function upload(mesh, wire) {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const buf = (data, loc, size) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); };
+  buf(mesh.positions, 0, 3); buf(mesh.normals, 1, 3); buf(mesh.uvs || new Float32Array(mesh.positions.length / 3 * 2), 2, 2);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+  let wvao = null, wcount = 0;
+  if (wire) {
+    const set = new Set(), lines = [], I = mesh.indices;
+    for (let t = 0; t < I.length; t += 3) for (let k = 0; k < 3; k++) { const a = I[t + k], b = I[t + (k + 1) % 3], key = a < b ? a * 4294967296 + b : b * 4294967296 + a; if (!set.has(key)) { set.add(key); lines.push(a, b); } }
+    wvao = gl.createVertexArray(); gl.bindVertexArray(wvao);
+    buf(mesh.positions, 0, 3); buf(mesh.normals, 1, 3); buf(mesh.uvs || new Float32Array(mesh.positions.length / 3 * 2), 2, 2);
+    const lb = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lb); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, Uint32Array.from(lines), gl.STATIC_DRAW); wcount = lines.length;
+  }
+  gl.bindVertexArray(null);
+  return { vao, count: mesh.indices.length, wvao, wcount };
+}
+gl.bindAttribLocation(prog, 0, 'aPos'); gl.bindAttribLocation(prog, 1, 'aNrm'); gl.bindAttribLocation(prog, 2, 'aUv'); gl.linkProgram(prog);
+const U2 = PG.glu.uniforms(gl, prog);
+
+// ---------------------------------------------------------------- items
+const rng = PG.util.rng(1234);
+const P = (f) => f;
+function ringLoft(stations, n) {   // car-ish fuselage: stations [{x, w, h, y, p}] -> sections in the YZ plane, closed superellipses
+  return stations.map(s => { const r = []; for (let i = 0; i < n; i++) { const a = i / n * TAU, c = Math.cos(a), sn = Math.sin(a), e = 2 / (s.p || 2.6); r.push([s.x, s.y + s.h * Math.sign(sn) * Math.pow(Math.abs(sn), e), s.w * Math.sign(c) * Math.pow(Math.abs(c), e)]); } return r; });
+}
+const T = (mesh, x, y, z) => G.translate(mesh, x, y, z);
+const spheresAt = (pts, r) => G.merge(pts.map(p => T(G.sphere(r, 10, 6), p[0], p[1], p[2])));
+
+const SHEETS = {
+  1: [
+    ['box', () => G.box(1.2, 0.8, 1), {}],
+    ['box div [3,2,4]  flatShade', () => G.flatShade(G.box(1.2, 0.8, 1, { div: [3, 2, 4] })), {}],
+    ['roundedBox r=.15 seg 4', () => G.roundedBox(1.2, 0.8, 1, 0.15, 4), {}],
+    ['roundedBox r=max (pill)', () => G.roundedBox(1.4, 0.5, 0.5, 0.25, 8), {}],
+    ['sphere 48x24', () => G.sphere(0.6, 48, 24), {}],
+    ['ellipsoid 1.0/.5/.7', () => G.ellipsoid(0.7, 0.35, 0.5, 40, 20), {}],
+    ['cubeSphere n=10', () => G.cubeSphere(0.6, 10), {}],
+    ['cylinder (caps)', () => G.cylinder(0.4, 0.4, 1, 48, 3), {}],
+    ['cone', () => G.cone(0.5, 1, 48), {}],
+    ['frustum, open ends', () => G.cylinder(0.25, 0.5, 1, 40, 1, { caps: false }), { closed: false }],
+    ['torus R.45 r.16', () => G.torus(0.45, 0.16, 64, 24), {}],
+    ['capsule', () => G.capsule(0.28, 0.7, 32, 10), {}],
+    ['disc + ring (open)', () => G.merge([T(G.disc(0.35, 48), -0.42, 0, 0), T(G.ring(0.18, 0.4, 48), 0.5, 0, 0)]), { closed: false }],
+    ['grid wave / plane 6x6', () => G.merge([G.grid(24, 24, (u, v) => [(u - 0.5) * 1.6, 0.12 * Math.sin(u * 9) * Math.cos(v * 7), (0.5 - v) * 1.6]), T(G.plane(0.5, 0.5, 6, 6), 0, 0.5, 0)]), { closed: false, rot: [35, 40] }],
+    ['hemisphere (theta 0..pi/2)', () => G.sphere(0.7, 40, 12, { thetaLength: PI / 2 }), { closed: false, rot: [35, 45] }],
+  ],
+  2: [
+    ['lathe vase (creases)', () => G.lathe([[0, 0], [0.32, 0], [0.34, 0.03], [0.34, 0.06], [0.2, 0.28], [0.16, 0.5], [0.3, 0.75], [0.36, 0.95], [0.3, 0.95], [0.26, 0.9], [0, 0.9]], 48), {}],
+    ['lathe goblet (smooth+hard)', () => G.lathe([[0, 0], [0.3, 0], [0.3, 0.04], [0.06, 0.1, false], [0.05, 0.4], [0.1, 0.5], [0.35, 0.75], [0.4, 1.0], [0.37, 1.0], [0.3, 0.7], [0.08, 0.53], [0, 0.5]], 48), {}],
+    ['lathe wheel-hub profile', () => G.lathe([[0, -0.1], [0.12, -0.1], [0.12, -0.02], [0.32, -0.02, true], [0.34, 0], [0.4, 0.03], [0.43, 0.08, false], [0.44, 0.12], [0.4, 0.12], [0.36, 0.04], [0.14, 0.06], [0.1, 0.1], [0, 0.1]], 64), { rot: [35, 40] }],
+    ['lathe 270deg (open)', () => G.lathe([[0.25, -0.4], [0.5, -0.4], [0.5, 0.4], [0.25, 0.4], [0.25, -0.4]], 40, { sweep: TAU * 0.75 }), { closed: false, rot: [35, 40] }],
+    ['lathe closed profile (torus)', () => G.lathe(shapes.circle(0.18, 24).map(p => [p[0] + 0.45, p[1]]).concat([[0.63, 0]]), 56), {}],
+    ['extrude star', () => G.extrude(shapes.star(0.7, 0.32, 7), 0.3, { center: true }), { rot: [68, 26] }],
+    ['extrude gear + hole + bevel', () => G.extrude(shapes.gear(0.7, 0.58, 14, 0.28, 0.5), 0.25, { center: true, holes: [shapes.circle(0.22, 24)], bevel: { size: 0.025, segments: 3 } }), { rot: [68, 26] }],
+    ['extrude roundRect bevel', () => G.extrude(shapes.roundRect(1.3, 0.8, 0.22, 8), 0.3, { center: true, bevel: { size: 0.07, segments: 5 } }), { rot: [68, 26] }],
+    ['extrude wheel windows', () => {
+      const holes = []; for (let i = 0; i < 5; i++) { const a = i / 5 * TAU; holes.push(shapes.slot(0.45, 0.16, 5).map(p => { const x = p[0] + 0.4, y = p[1]; return [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)]; })); }
+      holes.push(shapes.circle(0.07, 12));
+      return G.extrude(shapes.circle(0.72, 64), 0.12, { center: true, holes, bevel: { size: 0.012, segments: 2 } });
+    }, { rot: [68, 26] }],
+    ['extrude concave L + slot hole', () => G.extrude([[-0.6, -0.5], [0.6, -0.5], [0.6, -0.1], [-0.2, -0.1], [-0.2, 0.5], [-0.6, 0.5]], 0.3, { center: true, holes: [shapes.slot(0.5, 0.12, 4).map(p => [p[0] + 0.1, p[1] - 0.3])], bevel: { size: 0.03, segments: 3 } }), { rot: [68, 26] }],
+    ['extrude 3 holes, steps 3', () => G.extrude(shapes.circle(0.7, 40), 0.3, { holes: [shapes.circle(0.15, 16, 0.3, 0), shapes.circle(0.15, 16, -0.15, 0.26), shapes.circle(0.15, 16, -0.15, -0.26)], steps: 3, center: true }), { rot: [68, 26] }],
+    ['offset polygons in/out', () => { const base = shapes.star(0.65, 0.3, 6); const o = G.offsetPolygon(base, 0.08, { join: 'round' }), i = G.offsetPolygon(base, -0.06);
+      return G.merge([T(G.extrude(o, 0.04), 0, 0, 0), T(G.extrude(base, 0.04), 0, 0, 0.05), T(G.extrude(i, 0.04), 0, 0, 0.1)]); }, { rot: [68, 26] }],
+    ['roundPolygon r=.15', () => G.extrude(G.roundPolygon([[-0.6, -0.4], [0.6, -0.4], [0.3, 0.1], [0.6, 0.5], [-0.6, 0.5]], 0.15, 8), 0.25, { center: true }), { rot: [68, 26] }],
+    ['extrude slot/ngon', () => G.merge([T(G.extrude(shapes.slot(1.0, 0.3, 8), 0.2, { bevel: 0.03 }), 0, -0.3, 0), T(G.extrude(shapes.ngon(0.3, 6, 0.3), 0.3, { bevel: { size: 0.03, segments: 2 } }), 0, 0.3, 0)]), { rot: [68, 26] }],
+    ['extrude ellipse + steps', () => G.extrude(shapes.ellipse(0.7, 0.35, 48), 0.5, { steps: 4, center: true }), { rot: [68, 26] }],
+  ],
+  3: (() => {
+    const helix = []; for (let i = 0; i <= 90; i++) { const a = i / 90 * 4.5 * PI; helix.push([Math.cos(a) * 0.4, i / 90 * 1.1 - 0.55, Math.sin(a) * 0.4]); }
+    const knot = []; for (let i = 0; i < 160; i++) { const t = i / 160 * TAU; knot.push([(Math.sin(t) + 2 * Math.sin(2 * t)) * 0.16, (Math.cos(t) - 2 * Math.cos(2 * t)) * 0.16, -Math.sin(3 * t) * 0.16]); }
+    const s1 = G.catmullRom([[-0.7, -0.2, 0], [-0.3, 0.3, 0.2], [0.2, -0.3, -0.2], [0.7, 0.25, 0.1]], { segments: 14 });
+    return [
+      ['tube helix r=.05', () => G.tube(helix, 0.05, { radialSegments: 14 }), {}],
+      ['tube tapered + round caps', () => G.tube(s1, (t) => 0.13 * (1 - 0.75 * t) + 0.02, { radialSegments: 16, caps: 'round', capSegments: 6 }), {}],
+      ['tube trefoil (closed)', () => G.tube(knot, 0.065, { closed: true, radialSegments: 14 }), { rot: [30, 40] }],
+      ['sweep rect + twist', () => G.sweep(shapes.roundRect(0.16, 0.05, 0.015, 3), s1, { twist: PI * 1.5 }), {}],
+      ['sweep open ribbon', () => G.sweep([[-0.15, 0.03], [-0.1, 0], [0.1, 0], [0.15, 0.03]], helix, { closedProfile: false, up: [0, 1, 0], frames: 'up' }), { closed: false }],
+      ['sweep ngon taper+twist', () => G.sweep(shapes.ngon(1, 5), s1, { scale: (t) => 0.16 * (1 - 0.7 * Math.sin(t * PI * 0.9)) + 0.02, twist: 4 }), {}],
+      ['sweep L-profile closed path', () => G.sweep([[-0.06, -0.06], [0.06, -0.06], [0.06, -0.03], [-0.03, -0.03], [-0.03, 0.06], [-0.06, 0.06]], shapes.circle(0.5, 48).map(p => [p[0], 0, p[1]]), { closed: true }), { rot: [35, 40] }],
+      ['loft circle->square->circle', () => G.loft([0, 1, 2, 3, 4, 5, 6].map(k => { const t = Math.sin(k / 6 * PI), r = []; for (let i = 0; i < 32; i++) { const a = i / 32 * TAU, c = Math.cos(a), s = Math.sin(a), m = Math.max(Math.abs(c), Math.abs(s)); const f = (1 - t) + t / m; r.push([c * f * 0.35, k * 0.15 - 0.45, s * f * 0.35]); } return r; }), { closed: true, crease: 50 }), {}],
+      ['loft hexagon->circle', () => G.loft([0, 1, 2, 3].map(k => { const r = []; const t = k / 3; for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; const hx = shapes.ngon(0.4, 6, 0)[Math.floor(i / 4)], hx2 = shapes.ngon(0.4, 6, 0)[(Math.floor(i / 4) + 1) % 6], f = (i % 4) / 4; const px = hx[0] + (hx2[0] - hx[0]) * f, py = hx[1] + (hx2[1] - hx[1]) * f; r.push([px * (1 - t) + Math.cos(a) * 0.4 * t, k * 0.3 - 0.45, py * (1 - t) + Math.sin(a) * 0.4 * t]); } return r; }), { closed: true, crease: 35 }), {}],
+      ['loft "fuselage" superellipses', () => G.loft(ringLoft([{ x: -0.9, w: 0.05, h: 0.05, y: 0.15 }, { x: -0.7, w: 0.3, h: 0.14, y: 0.16 }, { x: -0.3, w: 0.42, h: 0.2, y: 0.22 }, { x: 0.2, w: 0.44, h: 0.24, y: 0.27 }, { x: 0.6, w: 0.36, h: 0.16, y: 0.2 }, { x: 0.9, w: 0.1, h: 0.05, y: 0.12 }], 40), { closed: true }), { rot: [30, 40] }],
+      ['loft closedV ring (torus-like)', () => G.loft(Array.from({ length: 40 }, (_, k) => { const a = k / 40 * TAU, ca = Math.cos(a), sa = Math.sin(a), r = []; for (let i = 0; i < 20; i++) { const b = i / 20 * TAU, rr = 0.5 + (0.14 + 0.05 * Math.sin(a * 3)) * Math.cos(b); r.push([ca * rr, (0.1 + 0.05 * Math.cos(a * 2)) * Math.sin(b) * 1.6, sa * rr]); } return r; }), { closed: true, closedV: true }), { rot: [35, 40] }],
+      ['grid: egg crate', () => G.grid(48, 48, (u, v) => [(u - 0.5) * 1.5, 0.08 * Math.sin(u * 18) * Math.sin(v * 18), (0.5 - v) * 1.5]), { closed: false, rot: [35, 40] }],
+      ['grid: sphere-ish dome (poles)', () => G.grid(48, 24, (u, v) => { const a = u * TAU, b = v * PI * 0.5; return [Math.cos(a) * Math.sin(b) * 0.7, Math.cos(b) * 0.6, Math.sin(a) * Math.sin(b) * 0.7]; }), { closed: false }],
+      ['bezierPath -> tube + beads', () => { const path = G.bezierPath([[-0.7, -0.3, 0], [-0.3, 0.6, 0.3], [0.1, -0.6, -0.3], [0.3, 0.1, 0], [0.5, 0.5, 0.2], [0.7, 0.4, 0.3], [0.8, -0.2, 0.1]], 18); const beads = G.resample(path, 14); return G.merge([G.tube(path, 0.025, { radialSegments: 10 }), spheresAt(beads, 0.055)]); }, { rot: [80, 20] }],
+      ['catmullRom tension 0 / .6 / 1', () => { const ctrl = [[-0.7, 0, 0], [-0.3, 0.4, 0], [0.1, -0.2, 0], [0.4, 0.3, 0], [0.7, 0, 0]]; const mk = (ten, y) => T(G.tube(G.catmullRom(ctrl, { tension: ten, segments: 14 }), 0.02, { radialSegments: 8, caps: 'round', capSegments: 3 }), 0, y, 0); return G.merge([mk(0, 0.45), mk(0.6, 0), mk(1, -0.45)]); }, { rot: [80, 12] }],
+    ];
+  })(),
+  4: (() => {
+    const wingMain = () => G.extrudeAirfoil(G.naca4(0.42, 0.055, 0.42, 0.11, 48, { teThickness: 0.006 }), 0.93, { mirror: true, taper: 0.9, sweepDeg: 4, twistDeg: 1.5, segments: 8 });
+    return [
+      ['extrudeAirfoil tapered/swept/twisted', () => G.extrudeAirfoil(G.naca4(0.5, 0.04, 0.4, 0.12, 48), 1.4, { taper: 0.45, sweepDeg: 25, twistDeg: -4, segments: 10 }), { rot: [55, 24] }],
+      ['thick-TE wing, mirrored, dihedral', () => G.extrudeAirfoil(G.naca4(0.45, 0.05, 0.4, 0.1, 48, { teThickness: 0.03 }), 0.7, { mirror: true, dihedralDeg: 8, taper: 0.7, segments: 8 }), { rot: [60, 25] }],
+      ['2-element wing + endplates', () => {
+        const main = wingMain(), flap = T(G.rotate(G.extrudeAirfoil(G.naca4(0.16, 0.08, 0.4, 0.09, 40, { teThickness: 0.004 }), 0.9, { mirror: true, taper: 0.9 }), 'z', -0.42), 0.4, 0.075, 0);
+        const ep = (s) => T(G.roundedBox(0.5, 0.2, 0.008, 0.004, 1), 0.2, 0.02, s * 0.945);
+        return G.merge([main, flap, ep(1), ep(-1)]);
+      }, { rot: [72, 14] }],
+      ['airfoil 2D family (extruded)', () => G.merge([['0012', 0, 0.25], ['2412', 0, 0.08], ['4412', 0, -0.08]].map(([c, x, y]) => T(G.extrude(G.naca(c, 1.1, 60), 0.03), -0.55, y, 0)).concat([T(G.extrude(G.naca4(1.1, 0.02, 0.4, 0.12, 60, { teThickness: 0.04 }), 0.03), -0.55, -0.25, 0)])), { rot: [88, 6] }],
+      ['mirrorZ (merged)', () => { const half = G.merge([T(G.ellipsoid(0.35, 0.2, 0.25, 24, 12), 0, 0, 0.45), T(G.roundedBox(0.3, 0.1, 0.2, 0.04, 3), 0.35, -0.05, 0.3)]); return G.mirrorZ(half, true); }, { rot: [30, 40] }],
+      ['merge + transforms (boxes)', () => G.merge([G.box(0.3, 0.3, 0.3, { radius: 0.05 }), G.box(0.3, 0.3, 0.3, { radius: 0.05 }), G.cylinder(0.12, 0.12, 0.4, 24)], [m4.translation(-0.5, 0, 0), m4.chain(m4.translation(0.1, 0, 0), m4.rotationY(0.6), m4.rotationZ(0.3)), m4.chain(m4.translation(0.6, 0, 0), m4.rotationX(PI / 2), m4.scaling(1, 1.5, 1))]), { rot: [30, 35] }],
+      ['transform: neg. scale keeps winding', () => G.merge([G.box(0.5, 0.5, 0.5), G.transform(T(G.cone(0.25, 0.6, 24), 0.7, 0, 0), m4.scaling(-1, 1, 1))]), { rot: [30, 35] }],
+      ['noise blob: smooth normals', () => blob(180), { rot: [25, 40] }],
+      ['noise blob: crease 25deg', () => G.computeNormals(G.weld(blob(180, true), 1e-6, { positionOnly: true }), 25), { rot: [25, 40] }],
+      ['noise blob: flatShade', () => G.flatShade(blob(180)), { rot: [25, 40] }],
+      ['blob + generateUVs(box)', () => G.generateUVs(blob(180), { mode: 'box', scale: 3 }), { rot: [25, 40], uv: true }],
+      ['generateUVs cylindrical', () => G.generateUVs(G.cylinder(0.4, 0.4, 1, 24, 6), { mode: 'cylindrical', axis: 'y', scale: 2 }), { rot: [25, 40], uv: true }],
+      ['subdivideMesh x1 (wire below)', () => G.subdivideMesh(G.box(0.8, 0.8, 0.8)), { closed: true, rot: [30, 40], wire: true }],
+      ['bevel/uv unit mode box', () => G.box(0.8, 0.5, 0.8, { radius: 0.08, uv: 'unit' }), { rot: [30, 40], uv: true }],
+      ['uvScale [2,1] cylinder', () => G.cylinder(0.35, 0.35, 0.9, 32, 1, { uvScale: [2, 1] }), { rot: [30, 40], uv: true }],
+    ];
+    function blob(n, unweldedFlat) {
+      const m = G.cubeSphere(0.6, 16), P = m.positions;
+      for (let i = 0; i < P.length; i += 3) { const x = P[i], y = P[i + 1], z = P[i + 2], k = 1 + 0.22 * Math.sin(x * 5.3 + 1) * Math.sin(y * 4.1) * Math.cos(z * 4.7 + 2) + 0.06 * Math.sin(x * 15 + y * 12); P[i] *= k; P[i + 1] *= k; P[i + 2] *= k; }
+      return unweldedFlat ? m : G.computeNormals(m, 180);
+    }
+  })(),
+  5: [],   // raycaster demos are built procedurally below
+};
+
+// ---------------------------------------------------------------- raycaster sheet
+function raycasterSheet() {
+  const out = [];
+  const txt = [];
+  const t = (s, ok = true) => { txt.push({ s, ok }); if (!ok) results.failures++; };
+  // analytic tests
+  const sph = G.sphere(1, 96, 48), rc = G.raycaster(sph);
+  let maxE = 0, miss = 0;
+  for (let i = 0; i < 3000; i++) { const a = i * 2.399963, b = Math.acos(1 - 2 * ((i + 0.5) / 3000)), d = [Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)]; const h = rc.cast(d.map(v => v * 4), d.map(v => -v)); if (!h) miss++; else maxE = Math.max(maxE, Math.abs(h.t - 3)); }
+  t(`sphere r=1 (96x48): 3000 inward rays, misses ${miss}, max |t-3| = ${maxE.toExponential(2)} (tessellation limit ~5e-4)`, miss === 0 && maxE < 1.5e-3);
+  const ca = rc.castAll([0, 0.2, -3], [0, 0, 1]); t(`castAll through sphere: ${ca.length} hits at t=${ca.map(h => h.t.toFixed(4)).join(', ')} (expect 2: 3-sqrt(0.96)=2.0202.. / 3.9798..), front flags ${ca.map(h => h.front)}`, ca.length === 2 && ca[0].front && !ca[1].front && Math.abs(ca[0].t - (3 - Math.sqrt(0.96))) < 2e-3);
+  const hy = rc.heightAt(0.3, 0.4); t(`heightAt(0.3,0.4) = ${hy.toFixed(5)} (expect ${Math.sqrt(0.75).toFixed(5)})`, Math.abs(hy - Math.sqrt(0.75)) < 1e-3);
+  const nr = rc.nearest([2, 1, 0]); t(`nearest([2,1,0]) dist ${nr.distance.toFixed(4)} (expect ${(Math.hypot(2, 1) - 1).toFixed(4)})`, Math.abs(nr.distance - (Math.hypot(2, 1) - 1)) < 2e-3);
+  const box = T(G.box(2, 1, 3), 0, 0.5, 0), rb = G.raycaster(box);
+  let bh = rb.cast([5, 0.3, 0.2], [-1, 0, 0]); t(`box 2x1x3: cast -X from x=5: t=${bh.t.toFixed(6)} (expect 4) normal ${bh.normal.map(v => v.toFixed(2))} front=${bh.front}`, Math.abs(bh.t - 4) < 1e-6 && bh.normal[0] === 1);
+  bh = rb.cast([0.3, 3, -0.4], [0, -1, 0]); t(`box: heightAt(0.3,-0.4)=${rb.heightAt(0.3, -0.4)} (expect 1)`, Math.abs(rb.heightAt(0.3, -0.4) - 1) < 1e-6);
+  bh = rb.cast([-3, -3, 0], [1, 1, 0]); t(`box: diagonal ray through vertical edge/face diagonal hits: ${!!bh}`, !!bh);
+  t(`box: backfaces:false ray from inside -> ${rb.cast([0, 0.5, 0], [1, 0, 0], { backfaces: false })}`, rb.cast([0, 0.5, 0], [1, 0, 0], { backfaces: false }) === null);
+  // 1M triangles
+  let t0 = performance.now(); const big = G.sphere(1, 1000, 500); const gen = performance.now() - t0;
+  const rcb = G.raycaster(big); const nt = big.indices.length / 3;
+  t(`1M mesh: ${nt} triangles, generated in ${gen.toFixed(0)} ms, BVH build ${rcb.stats.buildMs.toFixed(0)} ms (${rcb.stats.nodes} nodes, depth ${rcb.stats.depth})`, rcb.stats.buildMs < 1000);
+  t0 = performance.now(); let hits = 0, err = 0; const NQ = 20000;
+  for (let i = 0; i < NQ; i++) { const a = i * 2.399963, b = Math.acos(1 - 2 * ((i + 0.5) / NQ)), d = [Math.sin(b) * Math.cos(a), Math.cos(b), Math.sin(b) * Math.sin(a)]; const h = rcb.cast(d.map(v => v * 3), d.map(v => -v)); if (h) { hits++; err = Math.max(err, Math.abs(h.t - 2)); } }
+  const us = (performance.now() - t0) / NQ * 1000; t(`cast on 1M tris: ${us.toFixed(2)} us/query, ${hits}/${NQ} hits, max err ${err.toExponential(1)}`, hits === NQ && us < 50);
+  t0 = performance.now(); for (let i = 0; i < NQ; i++) rcb.heightAt(Math.cos(i) * 0.9, Math.sin(i * 1.3) * 0.5); t(`heightAt on 1M tris: ${((performance.now() - t0) / NQ * 1000).toFixed(2)} us/query`, true);
+  t0 = performance.now(); for (let i = 0; i < 1000; i++) rcb.nearest([Math.cos(i) * 2, Math.sin(i * 1.3), Math.cos(i * 2.1) * 1.5]); t(`nearest on 1M tris: ${((performance.now() - t0) / 1000 * 1000).toFixed(1)} us/query`, true);
+  results.timing = { buildMs: rcb.stats.buildMs, castUs: us };
+  // visual: torus with rays
+  const tor = G.torus(0.5, 0.2, 64, 24), rt = G.raycaster(tor), hitPts = [], rays = [];
+  for (let i = 0; i < 40; i++) { const a = i / 40 * TAU, o = [Math.cos(a) * 1.2, 0.35 + 0.1 * Math.sin(i), Math.sin(a) * 1.2], target = [Math.cos(a + 0.4) * 0.5, 0, Math.sin(a + 0.4) * 0.5]; const d = [target[0] - o[0], target[1] - o[1], target[2] - o[2]]; const h = rt.cast(o, d); if (h) { hitPts.push(h.point); rays.push([o, h.point, h.normal]); } }
+  const lines = rays.map(([o, p]) => { const d = [p[0] - o[0], p[1] - o[1], p[2] - o[2]], l = Math.hypot(...d); return G.transform(G.cylinder(0.004, 0.004, l, 5, 1), m4.chain(m4.translation((o[0] + p[0]) / 2, (o[1] + p[1]) / 2, (o[2] + p[2]) / 2), m4.rotationAxis([d[2], 0, -d[0]], Math.acos(d[1] / l)))); });
+  const spikes = rays.map(([o, p, n]) => G.transform(G.cone(0.014, 0.08, 8), m4.chain(m4.translation(p[0] + n[0] * 0.04, p[1] + n[1] * 0.04, p[2] + n[2] * 0.04), m4.rotationAxis([n[2], 0, -n[0]], Math.acos(Math.max(-1, Math.min(1, n[1])))))));
+  out.push(['raycast rays -> hits + normals (torus)', () => G.merge([tor].concat(lines, spikes)), { closed: false, rot: [40, 30] }]);
+  // visual: shrink-wrap grid placing
+  const blobm = (() => { const m = G.cubeSphere(0.7, 18), P = m.positions; for (let i = 0; i < P.length; i += 3) { P[i + 1] *= 0.5; const k = 1 + 0.12 * Math.sin(P[i] * 6) * Math.cos(P[i + 2] * 5); P[i] *= k; P[i + 2] *= k; } return G.computeNormals(m, 180); })(), rb2 = G.raycaster(blobm);
+  const pegs = []; let placed = 0;
+  for (let ix = -6; ix <= 6; ix++) for (let iz = -6; iz <= 6; iz++) { const x = ix * 0.1, z = iz * 0.1, y = rb2.heightAt(x, z); if (y !== null) { pegs.push(T(G.cylinder(0.018, 0.018, 0.1, 8, 1), x, y + 0.03, z)); placed++; } }
+  out.push([`heightAt shrink-wrap: ${placed} pegs on a blob`, () => G.merge([blobm].concat(pegs)), { closed: false, rot: [40, 35] }]);
+  // nearest demo
+  const tk = G.tube(Array.from({ length: 80 }, (_, i) => { const a = i / 80 * TAU; return [Math.cos(a) * 0.5, Math.sin(a * 2) * 0.15, Math.sin(a) * 0.5]; }), 0.07, { closed: true, radialSegments: 14 }), rn = G.raycaster(tk);
+  const bits = [];
+  for (let i = 0; i < 24; i++) { const p = [Math.cos(i * 1.7) * 0.9, Math.sin(i * 2.3) * 0.5 + 0.1, Math.sin(i * 1.3) * 0.9], nn = rn.nearest(p); if (nn) { bits.push(T(G.sphere(0.02, 8, 4), p[0], p[1], p[2])); bits.push(T(G.sphere(0.012, 8, 4), nn.point[0], nn.point[1], nn.point[2])); const d = [nn.point[0] - p[0], nn.point[1] - p[1], nn.point[2] - p[2]], l = Math.hypot(...d); if (l > 1e-4) bits.push(G.transform(G.cylinder(0.003, 0.003, l, 4, 1), m4.chain(m4.translation((p[0] + nn.point[0]) / 2, (p[1] + nn.point[1]) / 2, (p[2] + nn.point[2]) / 2), m4.rotationAxis([d[2], 0, -d[0]], Math.acos(d[1] / l))))); } }
+  out.push(['nearest(): probe -> closest surface point', () => G.merge([tk].concat(bits)), { closed: false, rot: [35, 30] }]);
+  results.rayText = txt;
+  return { items: out, text: txt };
+}
+
+// ---------------------------------------------------------------- build + draw
+function build() {
+  let items = SHEETS[SHEET] || [];
+  let panelText = '';
+  if (SHEET === 5) { const r = raycasterSheet(); items = r.items; panelText = r.text.map(x => (x.ok ? 'ok   ' : 'FAIL ') + x.s).join('\n'); }
+  const cells = [];
+  for (const [name, fn, meta] of items) {
+    const t0 = performance.now(); let mesh, err = null;
+    try { mesh = fn(); } catch (e) { err = e; console.error(name, e); results.failures++; }
+    const ms = performance.now() - t0;
+    if (!mesh) { cells.push({ name, err: String(err), meta: meta || {} }); continue; }
+    const closed = (meta || {}).closed !== false, rep = G.validate(mesh, { expectClosed: closed });
+    const b = G.bounds(mesh);
+    if (!rep.ok) { results.failures++; console.error('validate failed: ' + name + ' :: ' + rep.issues.join('; ')); }
+    results.items.push({ name, verts: rep.vertexCount, tris: rep.triCount, ok: rep.ok, closed: rep.closed, volume: +rep.volume.toFixed(4), area: +rep.area.toFixed(4), issues: rep.issues, ms: +ms.toFixed(1) });
+    cells.push({ name, mesh, meta: meta || {}, rep, ms, b, gpu: upload(mesh, WIRE !== '0' || (meta || {}).wire) });
+  }
+  return { cells, panelText };
+}
+
+function render(cells, panelText) {
+  const dpr = window.devicePixelRatio || 1, W = window.innerWidth, H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height); gl.disable(gl.SCISSOR_TEST); gl.clearColor(0.078, 0.086, 0.102, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST); gl.enable(gl.SCISSOR_TEST); gl.useProgram(prog);
+  const panelH = SHEET === 5 ? 260 : 0, gridH = H - panelH, cw = W / COLS, ch = gridH / ROWS, pad = 4;
+  document.getElementById('panel').style.display = SHEET === 5 ? 'block' : 'none'; document.getElementById('panel').textContent = panelText;
+  cells.forEach((c, idx) => {
+    const col = idx % COLS, row = Math.floor(idx / COLS), x = col * cw, y = row * ch;
+    const lb = document.createElement('div'); lb.className = 'lb'; lb.style.left = (x + 8) + 'px'; lb.style.top = (y + 5) + 'px';
+    if (!c.mesh) { lb.innerHTML = `<b>${c.name}</b>\n<span class="bad">ERROR ${c.err}</span>`; document.body.appendChild(lb); return; }
+    const closedTxt = c.meta.closed === false ? 'open' : (c.rep.closed ? 'watertight' : 'NOT closed');
+    lb.innerHTML = `<b>${c.name}</b>\n${c.rep.vertexCount}v ${c.rep.triCount}t  ${closedTxt}  ${c.ms.toFixed(1)}ms  <span class="${c.rep.ok ? 'ok' : 'bad'}">${c.rep.ok ? 'valid' : c.rep.issues.join('; ')}</span>`;
+    document.body.appendChild(lb);
+    // viewport (GL origin is bottom-left)
+    const vx = Math.round((x + pad) * dpr), vy = Math.round((H - (y + ch) + pad) * dpr), vw = Math.round((cw - pad * 2) * dpr), vh = Math.round((ch - pad * 2) * dpr);
+    gl.viewport(vx, vy, vw, vh); gl.scissor(vx, vy, vw, vh);
+    gl.clearColor(0.108 + (idx % 2) * 0.012, 0.118 + (idx % 2) * 0.012, 0.14 + (idx % 2) * 0.012, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    const az = ((c.meta.rot ? c.meta.rot[0] : 32) + (Q.get('spin') ? +Q.get('spin') : 0)) * PI / 180, el = (c.meta.rot ? c.meta.rot[1] : 24) * PI / 180;
+    const fov = 32 * PI / 180, aspect = vw / vh, rad = Math.max(c.b.radius, 1e-3), dist = rad / Math.sin(fov / 2) * (aspect < 1 ? 1.1 / aspect : 1.05) * 0.86;
+    const eye = [c.b.center[0] + dist * Math.cos(el) * Math.cos(az), c.b.center[1] + dist * Math.sin(el), c.b.center[2] + dist * Math.cos(el) * Math.sin(az)];
+    const VP = m4.multiply(m4.perspective(fov, aspect, dist * 0.05, dist * 4), m4.lookAt(eye, c.b.center, [0, 1, 0]));
+    gl.uniformMatrix4fv(U2.uVP, false, VP); gl.uniform3fv(U2.uEye, eye);
+    const mode = c.meta.uv ? 'uv' : MODE, period = Math.pow(10, Math.floor(Math.log10(Math.max(c.b.diag, 1e-3) / 8)));
+    gl.uniform1i(U2.uMode, mode === 'normals' ? 1 : mode === 'uv' ? 2 : 0); gl.uniform1f(U2.uPeriod, period); gl.uniform3f(U2.uColor, 0.62, 0.68, 0.78);
+    const wire = WIRE !== '0' || c.meta.wire;
+    if (WIRE !== 'only') {
+      if (wire) { gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1); }
+      gl.bindVertexArray(c.gpu.vao); gl.drawElements(gl.TRIANGLES, c.gpu.count, gl.UNSIGNED_INT, 0); gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
+    if (wire && c.gpu.wvao) { gl.uniform1i(U2.uMode, 3); gl.uniform3f(U2.uColor, 0.03, 0.05, 0.08); gl.bindVertexArray(c.gpu.wvao); gl.drawElements(gl.LINES, c.gpu.wcount, gl.UNSIGNED_INT, 0); }
+  });
+  gl.bindVertexArray(null);
+  const err = gl.getError(); if (err) { console.error('GL error 0x' + err.toString(16)); results.failures++; }
+}
+
+const B = build();
+render(B.cells, B.panelText);
+results.glError = gl.getError();
+window.__geoResults = results;
+console.log('GEO_RESULTS ' + JSON.stringify({ sheet: SHEET, failures: results.failures, n: results.items.length, timing: results.timing }));
+window.__ready = true;
+</script>
+</body></html>

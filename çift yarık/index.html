@@ -1,0 +1,995 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kuantum Çift Yarık Deneyi — Schrödinger simülasyonu</title>
+<style>
+:root{
+  --bg:#04060b; --panel:rgba(255,255,255,.035); --line:rgba(255,255,255,.085);
+  --text:#e9eef8; --dim:#8b96ab; --dim2:#5d6779; --accent:#5cc8ff; --warm:#ffb45c; --hot:#ff7a45;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  min-height:100vh;color:var(--text);
+  font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  background:
+    radial-gradient(1100px 520px at 12% -12%,#0d1c38 0%,transparent 62%),
+    radial-gradient(900px 480px at 100% -5%,#1c0f2c 0%,transparent 58%),
+    var(--bg);
+}
+.app{max-width:2000px;margin:0 auto;padding:16px 22px 24px}
+.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:14px}
+.logo{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;font:600 24px/1 Georgia,"Times New Roman",serif;font-style:italic;
+  color:#04121f;background:linear-gradient(135deg,#8fe0ff,#5c8bff 55%,#b48cff);box-shadow:0 0 28px rgba(92,160,255,.45)}
+h1{font-size:20px;font-weight:650;letter-spacing:-.01em;margin:0}
+.brand p{margin:1px 0 0;color:var(--dim);font-size:13px}
+.keys{color:var(--dim2);font-size:12px;white-space:nowrap}
+.keys kbd{font:11px var(--mono);padding:1px 6px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;color:var(--dim);margin:0 2px}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 318px;gap:18px;align-items:start}
+.scope{position:relative;width:100%;aspect-ratio:1220/540;background:#03050a;border:1px solid var(--line);border-radius:16px;overflow:hidden;
+  box-shadow:0 30px 80px -30px rgba(0,0,0,.8),inset 0 0 0 1px rgba(255,255,255,.02)}
+#gl{position:absolute;left:0;top:calc(30/540*100%);width:calc(936/1220*100%);height:calc(480/540*100%);display:block}
+#ov{position:absolute;inset:0;width:100%;height:100%;display:block}
+.fatal{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:30px;background:#05070d;color:#ffb4a0}
+.fatal[hidden],pre#err[hidden]{display:none}
+.story{display:flex;gap:12px;align-items:flex-start;margin-top:14px;padding:13px 16px;border:1px solid var(--line);border-radius:12px;background:var(--panel);min-height:66px}
+.story .dot{flex:none;width:8px;height:8px;margin-top:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.story p{margin:0;font-size:15px;line-height:1.55;color:#dce4f2}
+.story p b{color:#fff;font-weight:600}
+
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.chips span{margin-right:2px;font-size:10.5px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;color:var(--dim2)}
+.chips button{border:1px solid var(--line);background:rgba(255,255,255,.04);color:#c4cddd;font:500 12.5px inherit;font-family:inherit;padding:6px 13px;border-radius:999px;cursor:pointer;transition:.15s}
+.chips button:hover{background:rgba(92,200,255,.13);border-color:rgba(92,200,255,.4);color:#e6f6ff}
+.panel{border:1px solid var(--line);border-radius:16px;background:var(--panel);padding:4px 15px 12px;backdrop-filter:blur(8px);position:sticky;top:12px;max-height:calc(100vh - 24px);overflow-y:auto;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.15) transparent}
+.grp{padding:10px 0;border-bottom:1px solid var(--line)}
+.grp:last-of-type{border-bottom:0}
+.grp h2{margin:0 0 7px;font-size:10.5px;font-weight:650;letter-spacing:.14em;text-transform:uppercase;color:var(--dim2)}
+.seg{display:flex;background:rgba(255,255,255,.05);border-radius:9px;padding:3px;gap:3px}
+.seg button{flex:1;border:0;background:transparent;color:var(--dim);font:500 12.5px inherit;font-family:inherit;padding:7px 4px;border-radius:7px;cursor:pointer;transition:.15s}
+.seg button:hover{color:var(--text)}
+.seg button.on{background:rgba(92,200,255,.16);color:#d8f1ff;box-shadow:inset 0 0 0 1px rgba(92,200,255,.35)}
+.row2{display:flex;gap:8px;margin-top:9px}
+.btn{flex:1;border:1px solid var(--line);background:rgba(255,255,255,.06);color:var(--text);font:500 13px inherit;font-family:inherit;padding:8px 10px;border-radius:9px;cursor:pointer;transition:.15s}
+.btn:hover{background:rgba(255,255,255,.11)}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{background:transparent}
+.btn.small{padding:7px 4px;font-size:12.5px}
+.btn.warm{border-color:rgba(255,180,92,.35);background:rgba(255,180,92,.09);color:#ffe2bf}
+.btn.warm:hover{background:rgba(255,180,92,.17)}
+.sl{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0 8px;margin:2px 0 4px}
+.sl span{color:#c4cddd;font-size:13px}
+.sl output{font:12px var(--mono);color:var(--accent)}
+.sl input{grid-column:1/3}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;margin:0;cursor:pointer;--p:50%}
+input[type=range]::-webkit-slider-runnable-track{height:4px;border-radius:2px;background:linear-gradient(to right,var(--accent) var(--p),rgba(255,255,255,.13) var(--p))}
+input[type=range]::-moz-range-track{height:4px;border-radius:2px;background:rgba(255,255,255,.13)}
+input[type=range]::-moz-range-progress{height:4px;border-radius:2px;background:var(--accent)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(92,200,255,.22)}
+input[type=range]::-moz-range-thumb{width:14px;height:14px;border:0;border-radius:50%;background:#fff;box-shadow:0 0 0 4px rgba(92,200,255,.22)}
+.switch{display:flex;align-items:center;gap:11px;cursor:pointer;user-select:none}
+.switch input{position:absolute;opacity:0;pointer-events:none}
+.switch i{flex:none;width:38px;height:22px;border-radius:11px;background:rgba(255,255,255,.14);position:relative;transition:.2s}
+.switch i::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.2s}
+.switch input:checked+i{background:var(--hot);box-shadow:0 0 16px rgba(255,122,69,.5)}
+.switch input:checked+i::after{transform:translateX(16px)}
+.switch input:focus-visible+i{outline:2px solid var(--accent);outline-offset:2px}
+.switch span{font-size:13.5px;color:#d5dcea}
+.note{margin:8px 0 0;font-size:12px;line-height:1.5;color:var(--dim)}
+.batch{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:6px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:rgba(0,0,0,.18)}
+.stat.wide{grid-column:1/3}
+.stat label{display:block;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim2)}
+.stat b{display:block;font:600 19px/1.25 var(--mono);color:#f1f5fc;font-variant-numeric:tabular-nums}
+.stat small{display:block;margin-top:1px;font-size:11.5px;color:var(--dim);font-family:var(--mono)}
+.vbar{height:4px;border-radius:2px;background:rgba(255,255,255,.1);margin-top:7px;overflow:hidden}
+.vbar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ff7a45,#ffd27a 50%,#8fe0ff);transition:width .35s}
+details{margin-top:10px;font-size:12.5px;color:var(--dim)}
+summary{cursor:pointer;color:#b6c0d3;font-weight:550;padding:4px 0}
+details p{margin:7px 0;line-height:1.55}
+details code{font:11.5px var(--mono);color:#cfe6ff}
+.hide{display:none!important}
+pre#err{position:fixed;left:8px;bottom:8px;max-width:70vw;margin:0;padding:8px 10px;background:#300;color:#fbb;font:11px var(--mono);z-index:9;border-radius:6px}
+@media (max-width:1100px){
+  .layout{grid-template-columns:1fr}
+  .keys{display:none}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <div class="logo">ψ</div>
+      <div>
+        <h1>Kuantum Çift Yarık Deneyi</h1>
+        <p>Schrödinger denklemi tarayıcıda gerçek zamanlı çözülüyor · her nokta tek bir parçacık</p>
+      </div>
+    </div>
+    <div class="keys"><kbd>Boşluk</kbd> duraklat <kbd>R</kbd> sıfırla <kbd>D</kbd> dedektör <kbd>M</kbd> mod</div>
+  </header>
+
+  <main class="layout">
+    <section>
+      <div class="scope" id="scope">
+        <canvas id="gl" aria-label="Dalga fonksiyonu"></canvas>
+        <canvas id="ov" aria-label="Ekran ve sayım"></canvas>
+        <div class="fatal" id="fatal" hidden></div>
+      </div>
+      <div class="story"><span class="dot"></span><p id="caption"></p></div>
+      <div class="chips" id="chips">
+        <span>Dene</span>
+        <button data-p="base">Girişim deseni</button>
+        <button data-p="det">Dedektörü aç</button>
+        <button data-p="wide">Yarıklar birbirinden uzak</button>
+        <button data-p="narrow">Dar yarıklar</button>
+        <button data-p="long">Uzun dalga boyu</button>
+      </div>
+    </section>
+
+    <aside class="panel">
+      <section class="grp">
+        <h2>Deney</h2>
+        <div class="seg" id="segMode">
+          <button data-v="cont" class="on">Sürekli demet</button>
+          <button data-v="shot">Tek parçacık</button>
+        </div>
+        <div class="row2">
+          <button class="btn" id="btnPlay">Duraklat</button>
+          <button class="btn ghost" id="btnReset">Sıfırla</button>
+        </div>
+      </section>
+
+      <section class="grp">
+        <h2>Parçacık ve yarıklar</h2>
+        <label class="sl"><span>Dalga boyu λ</span><output id="oLam"></output><input type="range" id="lam" min="8" max="20" step="1"></label>
+        <label class="sl"><span>Yarık aralığı d</span><output id="oD"></output><input type="range" id="d" min="50" max="200" step="2"></label>
+        <label class="sl"><span>Yarık genişliği a</span><output id="oA"></output><input type="range" id="a" min="10" max="70" step="2"></label>
+      </section>
+
+      <section class="grp">
+        <h2>Gözlemci</h2>
+        <label class="switch"><input type="checkbox" id="det"><i></i><span>Hangi yarıktan geçtiğini ölç</span></label>
+        <p class="note" id="detNote"></p>
+      </section>
+
+      <section class="grp">
+        <h2>Parçacık gönder</h2>
+        <label class="sl" id="rowRate"><span>Yağış hızı</span><output id="oRate"></output><input type="range" id="rate" min="0" max="100" step="1"></label>
+        <label class="sl"><span>Simülasyon hızı</span><output id="oSpeed"></output><input type="range" id="speed" min="0" max="7" step="1"></label>
+        <div class="batch">
+          <button class="btn small warm" data-add="100">+100</button>
+          <button class="btn small warm" data-add="1000">+1 000</button>
+          <button class="btn small warm" data-add="10000">+10 000</button>
+        </div>
+      </section>
+
+      <section class="grp">
+        <h2>Görünüm</h2>
+        <div class="seg" id="segView">
+          <button data-v="0" class="on">|ψ|²</button>
+          <button data-v="1">Re ψ</button>
+          <button data-v="2">Faz</button>
+        </div>
+        <label class="sl" style="margin-top:9px"><span>Parlaklık</span><output id="oExpo"></output><input type="range" id="expo" min="30" max="300" step="5"></label>
+        <label class="switch" style="margin-top:4px"><input type="checkbox" id="theory"><i></i><span>Kuramsal dağılımı göster</span></label>
+      </section>
+
+      <section class="grp">
+        <h2>Ölçümler</h2>
+        <div class="stats">
+          <div class="stat"><label>Parçacık</label><b id="stN">0</b></div>
+          <div class="stat"><label>Girişim görünürlüğü</label><b id="stV">—</b><div class="vbar"><i id="vbar"></i></div></div>
+          <div class="stat wide"><label>Saçak aralığı Δy</label><b id="stSp">—</b><small id="stSp2">beklenen λL/d = —</small></div>
+        </div>
+      </section>
+
+      <details>
+        <summary>Nasıl çalışıyor?</summary>
+        <p><b>Fizik.</b> Zamana bağlı Schrödinger denklemi <code>iψ<sub>t</sub> = −½∇²ψ</code> (ħ = m = 1), 1120×608 ızgarada GPU'da sıçramalı (leapfrog) şemayla çözülüyor. Yarıklı engel sonsuz yüksek bir potansiyel duvarı; kenarlardaki sünger katmanlar dalgayı yutuyor.</p>
+        <p><b>Noktalar.</b> Ekrana ulaşan olasılık akısı ∫j·dt hesaplanıyor. Her parçacığın ekrandaki yeri, bu dağılımdan (Born kuralı) tek bir rastgele çekimle belirleniyor. Tek tek rastgele, hepsi birlikte dalga.</p>
+        <p><b>Dedektör.</b> Açıkken her yarıktan geçen dalga ayrı bir dedektör durumuyla dolanıklaşıyor: iki dalga ayrı ayrı çözülüp yoğunlukları toplanıyor, aralarında girişim terimi kalmıyor. Bunu yapan bilinç değil, yol bilgisinin herhangi bir yerde kaydedilmesi.</p>
+        <p><b>Birimler.</b> Uzunluklar ızgara hücresi cinsinden, zaman Δt = 0,4 adımlarıyla. Ekran engelden 640 birim uzakta.</p>
+      </details>
+    </aside>
+  </main>
+</div>
+<pre id="err" hidden></pre>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const smooth = t => t * t * (3 - 2 * t);
+const fmt = (n, dg = 0) => n.toLocaleString('tr-TR', { minimumFractionDigits: dg, maximumFractionDigits: dg });
+window.addEventListener('error', e => { const el = $('#err'); el.hidden = false; el.textContent += `${e.message} @${e.lineno}\n`; });
+
+/* ------------------------------------------------------------------ *
+ *  Sabitler (ızgara birimi: 1 hücre, ħ = m = 1)
+ * ------------------------------------------------------------------ */
+const W = 1120, H = 608, DT = 0.4;
+const VX0 = 64, VX1 = 1000, VY0 = 64, VY1 = 544;      // görünen pencere
+const NR = VY1 - VY0;                                  // ekrandaki satır sayısı
+const SX = 1000, BX = 360, BT = 10, YC = H / 2;        // ekran sütunu, engel, merkez
+const X0 = 180, SIGX = 34, SIGY = 190, XSRC = 140;     // dalga paketi ve sürekli kaynak
+const SP_L = 64, SP_R0 = 1016, SP_T = 64, SP_SIG = 0.12; // sünger katman
+const BASE_SPS = 2000, MAXSTEPS = 260;
+const A_SHOT = 1.0, A_SRC = 0.75, T_RAMP = 160;
+const NB = 80, BIN_ROWS = NR / NB;
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2, 3, 4, 6];
+// ekran yerleşimi (mantıksal birim; dalga panelinde 1 birim = 1 hücre)
+const LW = 1220, LH = 540, WX = 0, WY = 30, WW = 936, WH = 480;
+const DPX = 952, DPW = 104, HPX = 1068, HPW = 152;
+
+/* ------------------------------------------------------------------ *
+ *  Parametreler (URL ile de verilebilir)
+ * ------------------------------------------------------------------ */
+const qs = new URLSearchParams(location.search);
+const TURBO = qs.has('turbo'), STOP = num_('stop');
+function num_(k) { return qs.has(k) ? +qs.get(k) : 0; }
+const num = (k, d) => qs.has(k) && isFinite(+qs.get(k)) ? +qs.get(k) : d;
+const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+const rnd = qs.has('seed') ? mulberry32(num('seed', 1)) : Math.random;
+const params = {
+  mode: qs.get('mode') === 'shot' ? 'shot' : 'cont',
+  lam: clamp(num('lam', 12), 8, 20), d: clamp(num('d', 112), 50, 200), a: clamp(num('a', 30), 10, 70),
+  det: qs.get('det') === '1',
+  view: { rho: 0, re: 1, phase: 2 }[qs.get('view')] ?? 0,
+  speed: clamp(Math.round(num('speed', 2)), 0, 7),   // SPEEDS indeksi
+  rate: clamp(num('rate', 49), 0, 100),               // 0..100 → 1..1000 /sn (log)
+  theory: qs.get('theory') !== '0', expo: clamp(num('expo', 100), 30, 300),
+};
+const rateVal = () => Math.pow(10, params.rate * 0.03);
+
+/* ------------------------------------------------------------------ *
+ *  WebGL2
+ * ------------------------------------------------------------------ */
+const glc = $('#gl'), ov = $('#ov'), scope = $('#scope');
+const gl = glc.getContext('webgl2', { alpha: false, antialias: false, powerPreference: 'high-performance' });
+if (!gl || !gl.getExtension('EXT_color_buffer_float')) {
+  const f = $('#fatal'); f.hidden = false;
+  f.innerHTML = '<div><b>WebGL2 (kayan noktalı render hedefi) gerekli.</b><br>Bu simülasyon Schrödinger denklemini GPU\'da çözüyor; tarayıcın bunu desteklemiyor.</div>';
+  return;
+}
+
+const VS = `#version 300 es
+void main(){ vec2 p=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2)); gl_Position=vec4(p*2.0-1.0,0.0,1.0); }`;
+const HEAD = '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\n';
+
+const FS_STEP = `
+uniform sampler2D uS; uniform sampler2D uG;
+uniform float uHd;
+uniform vec4 uSrc;
+uniform vec2 uSrcV;
+out vec4 o;
+void main(){
+  ivec2 p=ivec2(gl_FragCoord.xy);
+  ivec2 mx=textureSize(uS,0)-1;
+  vec2 c=texelFetch(uS,p,0).xy;
+  vec2 l=texelFetch(uS,ivec2(max(p.x-1,0),p.y),0).xy;
+  vec2 r=texelFetch(uS,ivec2(min(p.x+1,mx.x),p.y),0).xy;
+  vec2 d=texelFetch(uS,ivec2(p.x,max(p.y-1,0)),0).xy;
+  vec2 u=texelFetch(uS,ivec2(p.x,min(p.y+1,mx.y)),0).xy;
+  vec2 lap=l+r+d+u-4.0*c;
+#if PASS==0
+  c.x-=uHd*lap.y;
+#else
+  c.y+=uHd*lap.x;
+#endif
+  if(p.x==int(uSrc.x)){
+    float y=float(p.y)+0.5;
+    float w=smoothstep(uSrc.y,uSrc.y+uSrc.w,y)*(1.0-smoothstep(uSrc.z-uSrc.w,uSrc.z,y));
+    c+=uSrcV*w;
+  }
+  c*=texelFetch(uG,p,0).r;
+  o=vec4(c,0.0,1.0);
+}`;
+
+const FS_INIT = `
+uniform sampler2D uG;
+uniform vec4 uPk;
+uniform vec3 uK;
+out vec4 o;
+void main(){
+  ivec2 p=ivec2(gl_FragCoord.xy);
+  vec2 q=vec2(p)+0.5;
+  float dx=q.x-uPk.x, dy=q.y-uPk.y;
+  float env=exp(-dx*dx/(4.0*uPk.z*uPk.z)-dy*dy/(4.0*uPk.w*uPk.w))*uK.z;
+  float ph=uK.x*q.x;
+  float m=texelFetch(uG,p,0).r>0.0?1.0:0.0;
+  o=vec4(env*cos(ph)*m,env*sin(ph-uK.y)*m,0.0,1.0);
+}`;
+
+const FS_ACC = `
+uniform sampler2D uA; uniform sampler2D uS0; uniform sampler2D uS1;
+uniform int uCol; uniform float uW1; uniform float uWt;
+out vec4 o;
+float flux(sampler2D s,int y){
+  vec2 c=texelFetch(s,ivec2(uCol,y),0).xy;
+  vec2 l=texelFetch(s,ivec2(uCol-1,y),0).xy;
+  vec2 r=texelFetch(s,ivec2(uCol+1,y),0).xy;
+  vec2 dd=(r-l)*0.5;
+  return max(c.x*dd.y-c.y*dd.x,0.0);
+}
+void main(){
+  int y=int(gl_FragCoord.y);
+  float f=flux(uS0,y)+uW1*flux(uS1,y);
+  o=texelFetch(uA,ivec2(0,y),0)+vec4(f*uWt,0.0,0.0,0.0);
+}`;
+
+const FS_SHOW = `
+uniform sampler2D uS0; uniform sampler2D uS1; uniform sampler2D uWall;
+uniform vec2 uVmin; uniform vec2 uVmax; uniform vec2 uRes;
+uniform float uBar; uniform float uDet; uniform float uView; uniform float uExp; uniform float uFade; uniform float uMaskX; uniform float uAuto;
+out vec4 o;
+vec2 bil(sampler2D s,vec2 p){
+  ivec2 sz=textureSize(s,0);
+  vec2 q=p-0.5; vec2 f=fract(q); ivec2 i=ivec2(floor(q));
+  ivec2 a=clamp(i,ivec2(0),sz-1); ivec2 b=clamp(i+1,ivec2(0),sz-1);
+  vec2 v00=texelFetch(s,ivec2(a.x,a.y),0).xy; vec2 v10=texelFetch(s,ivec2(b.x,a.y),0).xy;
+  vec2 v01=texelFetch(s,ivec2(a.x,b.y),0).xy; vec2 v11=texelFetch(s,ivec2(b.x,b.y),0).xy;
+  return mix(mix(v00,v10,f.x),mix(v01,v11,f.x),f.y);
+}
+vec3 pal(float t){
+  vec3 c0=vec3(0.010,0.016,0.040), c1=vec3(0.045,0.060,0.290), c2=vec3(0.075,0.320,0.800), c3=vec3(0.270,0.800,0.960), c4=vec3(0.960,0.985,1.0);
+  if(t<0.25) return mix(c0,c1,t/0.25);
+  if(t<0.50) return mix(c1,c2,(t-0.25)/0.25);
+  if(t<0.78) return mix(c2,c3,(t-0.50)/0.28);
+  return mix(c3,c4,(t-0.78)/0.22);
+}
+vec3 hsv(vec3 c){ vec3 k=clamp(abs(fract(c.x+vec3(0.0,2.0/3.0,1.0/3.0))*6.0-3.0)-1.0,0.0,1.0); return c.z*mix(vec3(1.0),k,c.y); }
+void main(){
+  vec2 p=mix(uVmin,uVmax,gl_FragCoord.xy/uRes);
+  vec2 a=bil(uS0,p);
+  float rho=dot(a,a); vec2 z=a;
+  if(uDet>0.5){
+    vec2 b=bil(uS1,p); float rb=dot(b,b);
+    if(p.x>=uBar){ rho+=rb; if(rb>dot(a,a)) z=b; } else { rho=0.5*(rho+rb); }
+    z*=sqrt(rho/max(dot(z,z),1e-20));
+  }
+  float ex=uExp*(p.x>=uBar?uAuto:1.0);
+  vec3 bg=vec3(0.008,0.012,0.028);
+  vec3 col;
+  if(uView<0.5){
+    col=pal(1.0-exp(-1.9*sqrt(rho*ex)));
+  } else if(uView<1.5){
+    float r=clamp(z.x*sqrt(ex)*0.85,-1.0,1.0);
+    vec3 warm=vec3(1.0,0.74,0.32), cool=vec3(0.22,0.58,1.0);
+    col=r>=0.0?mix(bg,warm,pow(r,0.85)):mix(bg,cool,pow(-r,0.85));
+  } else {
+    float ph=atan(z.y,z.x+1e-20);
+    col=hsv(vec3(ph/6.2831853+0.5,0.62,1.0-exp(-1.9*sqrt(rho*ex))));
+  }
+  col=mix(bg,col,uFade*smoothstep(uMaskX-14.0,uMaskX+2.0,p.x));
+  float g=bil(uWall,p).x;
+  float open=smoothstep(0.25,0.75,g);
+  float rim=exp(-pow((g-0.5)/0.22,2.0));
+  vec3 wc=vec3(0.30,0.34,0.44)+0.20*rim;
+  o=vec4(mix(wc,col,open),1.0);
+}`;
+
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function makeProg(fs, defs = '') {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, VS));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, HEAD + defs + fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = new Proxy({}, { get: (t, n) => t[n] ?? (t[n] = gl.getUniformLocation(p, n)) });
+  return { p, u };
+}
+const pR = makeProg(FS_STEP, '#define PASS 0\n'), pI = makeProg(FS_STEP, '#define PASS 1\n');
+const pInit = makeProg(FS_INIT), pAcc = makeProg(FS_ACC), pShow = makeProg(FS_SHOW);
+
+for (const pr of [pR, pI]) {
+  gl.useProgram(pr.p);
+  gl.uniform1i(pr.u.uS, 0); gl.uniform1i(pr.u.uG, 1);
+  gl.uniform1f(pr.u.uHd, 0.5 * DT);
+  gl.uniform4f(pr.u.uSrc, -1, 0, 0, 1); gl.uniform2f(pr.u.uSrcV, 0, 0);
+}
+gl.useProgram(pInit.p); gl.uniform1i(pInit.u.uG, 0);
+gl.useProgram(pAcc.p); gl.uniform1i(pAcc.u.uA, 0); gl.uniform1i(pAcc.u.uS0, 1); gl.uniform1i(pAcc.u.uS1, 2);
+gl.uniform1i(pAcc.u.uCol, SX); gl.uniform1f(pAcc.u.uWt, 2 * DT);
+gl.useProgram(pShow.p); gl.uniform1i(pShow.u.uS0, 0); gl.uniform1i(pShow.u.uS1, 1); gl.uniform1i(pShow.u.uWall, 2);
+gl.uniform2f(pShow.u.uVmin, VX0, VY0); gl.uniform2f(pShow.u.uVmax, VX1, VY1); gl.uniform1f(pShow.u.uBar, BX - BT / 2);
+
+function tex(fmt_, w, h) {
+  const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, fmt_, w, h);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  return t;
+}
+function fbo(t) {
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) throw new Error('Framebuffer eksik');
+  return f;
+}
+const CLEAR0 = new Float32Array(4);
+const clearFbo = f => { gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.clearBufferfv(gl.COLOR, 0, CLEAR0); };
+
+// iki dalga fonksiyonu kümesi: A (tek dalga ya da "üst yarık"), B ("alt yarık", yalnız dedektör açıkken)
+function makeSet() { const t = [tex(gl.RG32F, W, H), tex(gl.RG32F, W, H)]; return { tex: t, fbo: [fbo(t[0]), fbo(t[1])], mask: null }; }
+const setA = makeSet(), setB = makeSet();
+const maskBoth = tex(gl.R32F, W, H), maskTop = tex(gl.R32F, W, H), maskBot = tex(gl.R32F, W, H);
+const accTex = [tex(gl.RGBA32F, 1, H), tex(gl.RGBA32F, 1, H)];
+const acc = { fbo: [fbo(accTex[0]), fbo(accTex[1])], cur: 0 };
+const activeSets = () => params.det ? [setA, setB] : [setA];
+
+// sünger katman + maske tabanı
+const baseMask = new Float32Array(W * H), workMask = new Float32Array(W * H);
+(function () {
+  const sq = v => v * v;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const xc = x + 0.5, yc = y + 0.5; let s = 0;
+    if (xc < SP_L) s += sq((SP_L - xc) / SP_L);
+    if (xc > SP_R0) s += sq((xc - SP_R0) / (W - SP_R0));
+    if (yc < SP_T) s += sq((SP_T - yc) / SP_T);
+    if (yc > H - SP_T) s += sq((yc - (H - SP_T)) / SP_T);
+    baseMask[y * W + x] = Math.exp(-SP_SIG * s * DT / 2);
+  }
+})();
+function uploadMask(t, openTop, openBot) {
+  workMask.set(baseMask);
+  const hd = params.d / 2, ha = params.a / 2;
+  const b0 = YC - hd - ha, b1 = YC - hd + ha, t0 = YC + hd - ha, t1 = YC + hd + ha;
+  for (let x = BX - BT / 2; x < BX + BT / 2; x++) for (let y = 0; y < H; y++) {
+    const open = (openBot && y >= b0 && y < b1) || (openTop && y >= t0 && y < t1);
+    if (!open) workMask[y * W + x] = 0;
+  }
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, W, H, gl.RED, gl.FLOAT, workMask);
+}
+function uploadMasks() {
+  uploadMask(maskBoth, true, true); uploadMask(maskTop, true, false); uploadMask(maskBot, false, true);
+  setA.mask = params.det ? maskTop : maskBoth; setB.mask = maskBot;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Fizik türevleri
+ * ------------------------------------------------------------------ */
+let K0, VG, OMEGA, S0, T_END, T_ARR, T_READY;
+function derive() {
+  K0 = 2 * Math.PI / params.lam;
+  VG = Math.sin(K0);                                     // örgüdeki grup hızı
+  OMEGA = (2 / DT) * Math.asin(DT * (1 - Math.cos(K0)) / 2);
+  S0 = A_SRC * VG;
+  T_ARR = (SX - X0) / VG;
+  T_END = T_ARR + 4.5 * SIGX / VG + 120;
+  T_READY = (SX - XSRC) / VG + 380;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Deney durumu
+ * ------------------------------------------------------------------ */
+const S = {
+  running: true, simT: 0, carry: 0, phase: 'flight', collapseT: 0, fade: 1,
+  ready: false, emitting: false, emit: 0, ff: num('ff', 0),
+  pc: null, cdf: null, metrics: { V: 0, sp: null },
+  N: 0, dy: [], dz: [], bins: new Int32Array(NB), pending: 0, shots: 0,
+  flashes: [], emitAt: -1e9, lastRead: 0, frame: 0, now: 0, last: 0, hscale: 1, perf: 1, ema: 16.7, dirty: false,
+};
+
+function initState() {
+  gl.viewport(0, 0, W, H);
+  for (const s of activeSets()) {
+    clearFbo(s.fbo[1]);
+    if (params.mode === 'shot') {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, s.fbo[0]);
+      gl.useProgram(pInit.p);
+      gl.uniform4f(pInit.u.uPk, X0, YC, SIGX, SIGY);
+      gl.uniform3f(pInit.u.uK, K0, OMEGA * DT / 2, A_SHOT);
+      gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, s.mask);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+    } else clearFbo(s.fbo[0]);
+  }
+  for (const pr of [pR, pI]) {
+    gl.useProgram(pr.p);
+    if (params.mode === 'cont') gl.uniform4f(pr.u.uSrc, XSRC, SP_T / 2, H - SP_T / 2, 40);
+    else gl.uniform4f(pr.u.uSrc, -1, 0, 0, 1);
+    gl.uniform2f(pr.u.uSrcV, 0, 0);
+  }
+}
+function clearAcc() { clearFbo(acc.fbo[0]); clearFbo(acc.fbo[1]); acc.cur = 0; }
+
+function stepOnce() {
+  const cont = params.mode === 'cont', sets = activeSets();
+  let vR = 0, vI = 0;
+  if (cont) {
+    const t = S.simT, amp = DT * S0 * smooth(clamp(t / T_RAMP, 0, 1));
+    vR = amp * Math.cos(OMEGA * (t + 0.5 * DT)); vI = -amp * Math.sin(OMEGA * (t + DT));
+  }
+  gl.viewport(0, 0, W, H);
+  gl.useProgram(pR.p); if (cont) gl.uniform2f(pR.u.uSrcV, vR, 0);
+  for (const s of sets) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, s.fbo[1]);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, s.tex[0]);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, s.mask);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+  gl.useProgram(pI.p); if (cont) gl.uniform2f(pI.u.uSrcV, 0, vI);
+  for (const s of sets) {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, s.fbo[0]);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, s.tex[1]);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, s.mask);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+}
+function accumulate() {
+  gl.viewport(0, 0, 1, H);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fbo[1 - acc.cur]);
+  gl.useProgram(pAcc.p);
+  gl.uniform1f(pAcc.u.uW1, params.det ? 1 : 0);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, accTex[acc.cur]);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, setA.tex[0]);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, params.det ? setB.tex[0] : setA.tex[0]);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  acc.cur = 1 - acc.cur;
+}
+const accBuf = new Float32Array(H * 4);
+function readAcc() {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, acc.fbo[acc.cur]);
+  gl.readPixels(0, 0, 1, H, gl.RGBA, gl.FLOAT, accBuf);
+  const P = new Float64Array(NR); let s = 0;
+  for (let i = 0; i < NR; i++) { const v = Math.max(0, accBuf[(VY0 + i) * 4]); P[i] = v; s += v; }
+  if (!(s > 1e-12)) return null;
+  for (let i = 0; i < NR; i++) P[i] /= s;
+  return P;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Dağılım, örnekleme, girişim analizi
+ * ------------------------------------------------------------------ */
+function setPc(P) {
+  S.pc = P;
+  const c = new Float64Array(NR); let a = 0;
+  for (let i = 0; i < NR; i++) { a += P[i]; c[i] = a; }
+  S.cdf = c;
+  S.metrics = analyze(P);
+}
+function sampleRow() {
+  const c = S.cdf, u = rnd() * c[NR - 1];
+  let lo = 0, hi = NR - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (c[m] < u) lo = m + 1; else hi = m; }
+  return VY0 + lo + rnd();
+}
+function expectedSpacing() { return params.lam * (SX - BX - BT / 2) / params.d; }
+// iki noktasal kaynak: yol farkı nλ olan satır (hiperbol); k. saçağa kadar ortalama aralık
+function fringeSpacing(k) {
+  const L = SX - BX - BT / 2, d = params.d, lam = params.lam;
+  const yAt = n => {
+    const f = y => Math.hypot(L, y + d / 2) - Math.hypot(L, y - d / 2) - n * lam;
+    let lo = -4000, hi = 4000; if (f(lo) > 0 || f(hi) < 0) return NaN;
+    for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; f(m) < 0 ? lo = m : hi = m; }
+    return (lo + hi) / 2;
+  };
+  const a = yAt(k), b = yAt(-k); return (a - b) / (2 * k);
+}
+function analyze(P) {
+  const n = NR, s0 = expectedSpacing();
+  const w = Math.max(1, Math.round(s0 / 12)), Ps = new Float64Array(n);
+  for (let i = 0; i < n; i++) { let a = 0, c = 0; for (let j = i - w; j <= i + w; j++) if (j >= 0 && j < n) { a += P[j]; c++; } Ps[i] = a / c; }
+  const cen = n / 2, half = Math.min(n / 2 - 2, s0 * 3.3);
+  const i0 = Math.max(1, Math.floor(cen - half)), i1 = Math.min(n - 2, Math.ceil(cen + half));
+  const win = Math.max(3, Math.round(s0 * 0.3)), ext = [];
+  for (let i = i0; i <= i1; i++) {
+    const v = Ps[i]; let mx = true, mn = true;
+    for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win); j++) { if (j === i) continue; if (Ps[j] > v) mx = false; if (Ps[j] < v) mn = false; }
+    if (!mx && !mn) continue;
+    const t = mx ? 1 : -1, last = ext[ext.length - 1];
+    if (last && last.t === t && i - last.i <= win) continue;
+    ext.push({ i, v, t });
+  }
+  let vs = 0, vn = 0;
+  for (let k = 0; k + 1 < ext.length; k++) {
+    const a = ext[k], b = ext[k + 1]; if (a.t === b.t) continue;
+    const hi = Math.max(a.v, b.v), lo = Math.min(a.v, b.v);
+    vs += (hi - lo) / (hi + lo); vn++;
+  }
+  const maxima = ext.filter(e => e.t === 1);
+  let sp = null;
+  if (maxima.length >= 3) sp = (maxima[maxima.length - 1].i - maxima[0].i) / (maxima.length - 1);
+  const k = Math.max(1, Math.floor((maxima.length - 1) / 2));
+  return { V: vn ? vs / vn : 0, sp, nMax: maxima.length, ref: sp ? fringeSpacing(k) : null };
+}
+
+/* ------------------------------------------------------------------ *
+ *  Noktalar (ekran, önden görünüm) ve sayım
+ * ------------------------------------------------------------------ */
+const dotLayer = document.createElement('canvas'), dl = dotLayer.getContext('2d');
+const octx = ov.getContext('2d');
+let sc = 1, cs = 1, dprC = 1;
+const rowToPanelY = y => (VY1 - y) / NR * WH;
+function drawDot(y, z) {
+  dl.beginPath(); dl.arc(7 + z * (DPW - 14), rowToPanelY(y), 1.25, 0, 6.2832); dl.fill();
+}
+function prepDotCtx() { dl.setTransform(sc, 0, 0, sc, 0, 0); dl.globalCompositeOperation = 'lighter'; dl.fillStyle = 'rgba(255,186,108,.8)'; }
+function rebuildDots() {
+  dotLayer.width = Math.max(1, Math.round(DPW * sc)); dotLayer.height = Math.max(1, Math.round(WH * sc));
+  prepDotCtx();
+  for (let i = 0; i < S.N; i++) drawDot(S.dy[i], S.dz[i]);
+}
+function resetDots() {
+  S.N = 0; S.dy = []; S.dz = []; S.bins.fill(0); S.flashes = []; S.pending = 0; S.hscale = 1;
+  dotLayer.width = dotLayer.width; prepDotCtx();
+}
+function addDot(row) {
+  if (S.N >= 250000) return;
+  const z = rnd(); S.dy.push(row); S.dz.push(z); S.N++;
+  S.bins[clamp(Math.floor((row - VY0) / BIN_ROWS), 0, NB - 1)]++;
+  drawDot(row, z);
+  if (S.pending < 1 && S.flashes.length < 14) S.flashes.push({ row, z, t: S.now });
+}
+
+/* ------------------------------------------------------------------ *
+ *  Deney akışı
+ * ------------------------------------------------------------------ */
+function restart() {
+  derive(); uploadMasks();
+  S.simT = 0; S.carry = 0; S.ready = false; S.emitting = false; S.emit = 0; S.pc = null; S.cdf = null;
+  S.metrics = { V: 0, sp: null }; S.phase = 'flight'; S.lastRead = 0;
+  resetDots(); clearAcc(); initState();
+  S.fade = params.mode === 'shot' ? 0 : 1; S.emitAt = S.now;
+}
+function startShot() {
+  S.simT = 0; S.carry = 0; S.phase = 'flight'; S.fade = 0;
+  clearAcc(); initState(); S.emitAt = S.now;
+}
+function endShot() {
+  const P = readAcc();
+  if (P) { setPc(P); addDot(sampleRow()); S.shots++; }
+  S.phase = 'collapse'; S.collapseT = 0;
+}
+
+function stepSim(n) {
+  const shot = params.mode === 'shot';
+  for (let i = 0; i < n; i++) {
+    stepOnce(); S.simT += DT;
+    if (!shot && !S.ready && S.simT >= T_READY) { S.ready = true; clearAcc(); }
+    if (S.ready || (shot && S.simT > T_ARR - 5 * SIGX / VG)) accumulate();
+    if (shot && S.simT >= T_END) { endShot(); return; }
+  }
+}
+
+function advance(dtMs) {
+  if (S.phase === 'collapse') {
+    const dur = clamp(640 / Math.sqrt(SPEEDS[params.speed]), 260, 640);
+    S.collapseT += dtMs; S.fade = Math.max(0.0, 1 - S.collapseT / (dur * 0.66));
+    if (S.collapseT >= dur) startShot();
+    return;
+  }
+  const shot = params.mode === 'shot';
+  if (S.fade < 1) S.fade = Math.min(1, S.fade + dtMs / 260);
+  let mult = SPEEDS[params.speed];
+  if (!shot && !S.ready) mult = Math.max(mult, 3);
+  if (S.pending > 0 && !S.pc) mult = Math.max(mult, 4);
+  let want = mult * S.perf * BASE_SPS * dtMs / 1000 + S.carry;
+  if (S.ff > 0) want = Math.max(want, Math.min(S.ff, TURBO ? 1200 : 300));
+  let n = Math.min(Math.floor(want), S.ff > 0 && TURBO ? 1200 : MAXSTEPS); S.carry = want - Math.floor(want);
+  if (S.ff > 0) S.ff = Math.max(0, S.ff - n);
+  stepSim(n);
+
+  if (!shot && S.ready) {
+    if (!S.emitting && S.simT >= T_READY + 250) S.emitting = true;
+    if (S.emitting) {
+      if (S.frame - S.lastRead >= 6 || !S.pc) { const P = readAcc(); if (P) setPc(P); S.lastRead = S.frame; }
+      if (S.pc) {
+        S.emit += rateVal() * dtMs / 1000;
+        let k = Math.min(Math.floor(S.emit), 400); S.emit -= Math.floor(S.emit);
+        while (k-- > 0) addDot(sampleRow());
+      }
+    }
+  }
+}
+function pour() {
+  if (S.pending > 0 && S.pc) {
+    const k = Math.min(S.pending, TURBO ? 600 : 30);
+    for (let i = 0; i < k; i++) addDot(sampleRow());
+    S.pending -= k;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ *  Çizim: GL (dalga) + 2B katman (etiketler, ekran, sayım)
+ * ------------------------------------------------------------------ */
+function renderGL() {
+  if (!glc.width || !glc.height) return;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, glc.width, glc.height);
+  gl.useProgram(pShow.p);
+  gl.uniform2f(pShow.u.uRes, glc.width, glc.height);
+  gl.uniform1f(pShow.u.uDet, params.det ? 1 : 0);
+  gl.uniform1f(pShow.u.uView, params.view);
+  // tek parçacıkta paket yayıldıkça yoğunluk düşer: otomatik pozlama
+  const auto = params.mode === 'shot' ? 1 + Math.max(0, S.simT - 700) * VG / 55 : 1;
+  gl.uniform1f(pShow.u.uExp, (params.expo / 100) * (params.mode === 'shot' ? 1.5 : 1));
+  gl.uniform1f(pShow.u.uAuto, auto);
+  gl.uniform1f(pShow.u.uFade, S.fade);
+  gl.uniform1f(pShow.u.uMaskX, params.mode === 'cont' ? XSRC : -1000);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, setA.tex[0]);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, params.det ? setB.tex[0] : setA.tex[0]);
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, maskBoth);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+const FONT = 'ui-sans-serif,-apple-system,"SF Pro Text",system-ui,sans-serif';
+const cellX = cx => WX + (cx - VX0) / (VX1 - VX0) * WW;
+const cellY = cy => WY + (VY1 - cy) / NR * WH;
+function rr(c, x, y, w, h, r) { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); }
+function label(c, txt, x, y, o = {}) {
+  const px = Math.max(o.size || 10.5, 9.5 / cs);
+  c.font = `${o.weight || 600} ${px}px ${FONT}`; c.textAlign = o.align || 'left'; c.textBaseline = 'alphabetic';
+  c.letterSpacing = (o.ls ?? 1.3) + 'px'; c.fillStyle = o.color || 'rgba(150,162,184,.75)'; c.fillText(txt, x, y);
+}
+
+function drawOverlay() {
+  const c = octx;
+  c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, ov.width, ov.height);
+  c.setTransform(sc, 0, 0, sc, 0, 0);
+  const now = S.now, det = params.det;
+
+  // başlık bandı
+  label(c, 'KAYNAK', 10, 19);
+  label(c, 'YARIKLAR', cellX(BX), 19, { align: 'center' });
+  label(c, 'EKRAN', WX + WW - 8, 19, { align: 'right' });
+  label(c, 'ÖNDEN', DPX + DPW / 2, 19, { align: 'center' });
+  label(c, 'SAYIM', HPX + HPW / 2, 19, { align: 'center' });
+
+  // kaynak
+  const sy = cellY(YC);
+  if (params.mode === 'cont') {
+    c.strokeStyle = 'rgba(92,200,255,.35)'; c.setLineDash([3, 5]); c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(cellX(XSRC), WY + 6); c.lineTo(cellX(XSRC), WY + WH - 6); c.stroke(); c.setLineDash([]);
+    const g = c.createLinearGradient(cellX(XSRC) - 26, 0, cellX(XSRC), 0);
+    g.addColorStop(0, 'rgba(92,200,255,0)'); g.addColorStop(1, 'rgba(92,200,255,.10)');
+    c.fillStyle = g; c.fillRect(cellX(XSRC) - 26, WY, 26, WH);
+  } else {
+    const g = c.createRadialGradient(cellX(X0 - 96), sy, 0, cellX(X0 - 96), sy, 26);
+    g.addColorStop(0, 'rgba(120,210,255,.9)'); g.addColorStop(.35, 'rgba(92,200,255,.35)'); g.addColorStop(1, 'rgba(92,200,255,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(cellX(X0 - 96), sy, 26, 0, 6.2832); c.fill();
+    c.fillStyle = '#e8f8ff'; c.beginPath(); c.arc(cellX(X0 - 96), sy, 3.2, 0, 6.2832); c.fill();
+    const age = (now - S.emitAt) / 650;
+    if (age >= 0 && age < 1) {
+      c.strokeStyle = `rgba(140,220,255,${(1 - age) * .8})`; c.lineWidth = 1.6;
+      c.beginPath(); c.arc(cellX(X0), sy, 10 + age * 90, 0, 6.2832); c.stroke();
+    }
+  }
+
+  // ölçü çizgileri: d ve a
+  const yTop = cellY(YC + params.d / 2), yBot = cellY(YC - params.d / 2), bx = cellX(BX - BT / 2) - 18;
+  c.strokeStyle = 'rgba(200,214,240,.42)'; c.lineWidth = 1;
+  c.beginPath(); c.moveTo(bx, yTop); c.lineTo(bx, yBot); c.moveTo(bx - 4, yTop); c.lineTo(bx + 4, yTop); c.moveTo(bx - 4, yBot); c.lineTo(bx + 4, yBot); c.stroke();
+  label(c, 'd', bx - 8, sy + 4, { align: 'right', size: 12, weight: 500, ls: 0, color: 'rgba(200,214,240,.6)' });
+  const aTop = cellY(YC + params.d / 2 + params.a / 2), aBot = cellY(YC + params.d / 2 - params.a / 2), ax = bx + 11;
+  c.beginPath(); c.moveTo(ax, aTop); c.lineTo(ax, aBot); c.moveTo(ax - 3, aTop); c.lineTo(ax + 3, aTop); c.moveTo(ax - 3, aBot); c.lineTo(ax + 3, aBot); c.stroke();
+  label(c, 'a', ax + 6, (aTop + aBot) / 2 + 4, { size: 12, weight: 500, ls: 0, color: 'rgba(200,214,240,.6)' });
+
+  // yarık dedektörleri
+  if (det) {
+    const pulse = 0.5 + 0.5 * Math.sin(now / 260);
+    for (const yy of [yTop, yBot]) {
+      const x = cellX(BX + BT / 2) + 9;
+      const g = c.createRadialGradient(x, yy, 0, x, yy, 16 + pulse * 5);
+      g.addColorStop(0, 'rgba(255,140,80,.55)'); g.addColorStop(1, 'rgba(255,122,69,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(x, yy, 16 + pulse * 5, 0, 6.2832); c.fill();
+      c.strokeStyle = 'rgba(255,150,100,.95)'; c.lineWidth = 1.6;
+      c.beginPath(); c.arc(x, yy, 5.2, 0, 6.2832); c.stroke();
+      c.fillStyle = '#ffd9c2'; c.beginPath(); c.arc(x, yy, 1.8, 0, 6.2832); c.fill();
+    }
+    label(c, 'DEDEKTÖR', cellX(BX) + 26, WY + WH - 12, { color: 'rgba(255,150,100,.9)', ls: 1.1, size: 10 });
+  }
+
+  // λ cetveli ve teknik not
+  const ry = WY + WH + 17, rx = 12;
+  c.strokeStyle = 'rgba(200,214,240,.55)'; c.lineWidth = 1.2;
+  c.beginPath(); c.moveTo(rx, ry); c.lineTo(rx + params.lam, ry); c.moveTo(rx, ry - 4); c.lineTo(rx, ry + 4); c.moveTo(rx + params.lam, ry - 4); c.lineTo(rx + params.lam, ry + 4); c.stroke();
+  label(c, `λ = ${params.lam}`, rx + params.lam + 8, ry + 4, { size: 11, weight: 500, ls: .3, color: 'rgba(190,204,230,.75)' });
+  label(c, `iψₜ = −½∇²ψ   ·   ${W}×${H} ızgara   ·   Δt = ${fmt(DT, 1)}`, WX + WW - 8, ry + 4, { align: 'right', size: 10.5, weight: 500, ls: .4, color: 'rgba(120,132,154,.8)' });
+  if (!S.running) label(c, 'DURAKLATILDI', WX + WW / 2, WY + 22, { align: 'center', color: 'rgba(255,210,150,.9)' });
+
+  // ekran çizgisi
+  const sx = WX + WW;
+  const g = c.createLinearGradient(sx - 14, 0, sx, 0);
+  g.addColorStop(0, 'rgba(255,190,120,0)'); g.addColorStop(1, 'rgba(255,190,120,.22)');
+  c.fillStyle = g; c.fillRect(sx - 14, WY, 14, WH);
+  c.fillStyle = 'rgba(255,214,168,.9)'; c.fillRect(sx - 1.6, WY, 1.6, WH);
+
+  // paneller
+  for (const [px, pw] of [[DPX, DPW], [HPX, HPW]]) {
+    rr(c, px, WY, pw, WH, 6); c.fillStyle = 'rgba(8,11,19,1)'; c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.08)'; c.lineWidth = 1; c.stroke();
+  }
+  c.drawImage(dotLayer, 0, 0, dotLayer.width, dotLayer.height, DPX, WY, DPW, WH);
+
+  // histogram + kuramsal eğri
+  const x0 = HPX + 7, wmax = HPW - 15, binH = WH / NB;
+  let mx = 0; for (let b = 0; b < NB; b++) mx = Math.max(mx, S.bins[b]);
+  const E = new Float64Array(NB);
+  if (S.pc && params.theory) for (let i = 0; i < NR; i++) E[Math.floor(i / BIN_ROWS)] += S.pc[i] * S.N;
+  let ex = 0; for (let b = 0; b < NB; b++) ex = Math.max(ex, E[b]);
+  const target = Math.max(mx, ex, 3) * 1.12;
+  S.hscale += (target - S.hscale) * 0.25; if (S.N === 0) S.hscale = 3.4;
+  c.save(); rr(c, HPX, WY, HPW, WH, 6); c.clip();
+  c.fillStyle = 'rgba(255,170,90,.55)';
+  for (let b = 0; b < NB; b++) {
+    const v = S.bins[b]; if (!v) continue;
+    c.fillRect(x0, WY + WH - (b + 1) * binH + .35, Math.max(1, v / S.hscale * wmax), binH - .7);
+  }
+  if (S.pc && params.theory && S.N > 0) {
+    c.beginPath();
+    for (let i = 0; i < NR; i += 2) {
+      const x = x0 + S.pc[i] * S.N * BIN_ROWS / S.hscale * wmax, y = WY + WH - (i + .5) / NR * WH;
+      i ? c.lineTo(x, y) : c.moveTo(x, y);
+    }
+    c.strokeStyle = 'rgba(160,225,255,.95)'; c.lineWidth = 1.6; c.lineJoin = 'round'; c.stroke();
+  }
+  c.restore();
+  label(c, `N = ${fmt(S.N)}`, HPX + HPW - 8, WY + WH + 17 + 4, { align: 'right', size: 11, weight: 500, ls: .3, color: 'rgba(255,200,150,.85)' });
+
+  // ölçüm parlamaları
+  c.save(); c.beginPath(); c.rect(WX, WY, WW, WH); c.clip();
+  S.flashes = S.flashes.filter(f => now - f.t < 720);
+  for (const f of S.flashes) {
+    const age = (now - f.t) / 720, y = cellY(f.row);
+    c.strokeStyle = `rgba(255,220,170,${(1 - age) * (1 - age) * .9})`; c.lineWidth = 1.5;
+    c.beginPath(); c.arc(WX + WW, y, 4 + age * 34, 0, 6.2832); c.stroke();
+    const g = c.createRadialGradient(WX + WW - 2, y, 0, WX + WW - 2, y, 14);
+    g.addColorStop(0, `rgba(255,236,205,${(1 - age) * .95})`); g.addColorStop(1, 'rgba(255,190,120,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(WX + WW - 2, y, 14, 0, 6.2832); c.fill();
+  }
+  c.restore();
+  c.save(); rr(c, DPX, WY, DPW, WH, 6); c.clip();
+  for (const f of S.flashes) {
+    const age = (now - f.t) / 720, x = DPX + 7 + f.z * (DPW - 14), y = WY + rowToPanelY(f.row);
+    const g = c.createRadialGradient(x, y, 0, x, y, 16 * (1 - age * .4));
+    g.addColorStop(0, `rgba(255,240,215,${(1 - age) * .95})`); g.addColorStop(1, 'rgba(255,190,120,0)');
+    c.fillStyle = g; c.beginPath(); c.arc(x, y, 16, 0, 6.2832); c.fill();
+  }
+  c.restore();
+}
+
+/* ------------------------------------------------------------------ *
+ *  Anlatım satırı
+ * ------------------------------------------------------------------ */
+function captionText() {
+  const det = params.det, N = S.N;
+  if (params.mode === 'shot') {
+    if (S.phase === 'collapse') return '<b>Ölçüm.</b> Dalga fonksiyonu ekranda tek bir noktaya çöktü. Yeri rastgele; ama düşme olasılığı |ψ|² ile orantılı. Bir sonraki parçacık aynı dalgayla başlayacak, farklı bir yere düşecek.';
+    const t = S.simT, b0 = (BX - X0 - 2.5 * SIGX) / VG, b1 = (BX - X0 + 2.5 * SIGX) / VG, arr = T_ARR - 1.6 * SIGX / VG;
+    if (t < b0) return '<b>Bir parçacık yola çıktı.</b> Klasik bir top gibi tek bir yeri yok: konumu bir dalga paketi olarak yayılmış durumda ve engele doğru ilerliyor.';
+    if (t < b1) return det
+      ? '<b>Dalga engele ulaştı.</b> Her yarıkta bir dedektör “buradan geçti mi?” diye bakıyor. Yol bilgisi kaydedildiği için iki olasılık birbirinden ayrı kalıyor.'
+      : '<b>Dalga engele ulaştı.</b> “Hangi yarıktan geçiyor?” sorusunun cevabı yok: dalga iki yarığa da aynı anda giriyor.';
+    if (t < arr) return det
+      ? 'İki dalga da yayılıyor ama artık birbirine karışmıyor: <b>yol bilgisi girişimi yok ediyor.</b>'
+      : 'Her yarıktan çıkan dalga halkalar hâlinde yayılıyor; kesiştikleri yerde birbirini <b>güçlendiriyor</b> ya da <b>söndürüyor</b>. Bu girişim.';
+    return '<b>Dalga ekrana ulaşıyor.</b> Ekran bir ölçüm yapacak: parçacık tek bir noktada bulunacak.';
+  }
+  if (!S.ready || !S.emitting) return '<b>Sürekli bir parçacık demeti</b> yarıklara doğru ilerliyor. Dalga ekrana ulaşınca kararlı bir desen oluşacak.';
+  if (det) {
+    if (N < 40) return 'Dedektör açık. Her nokta tek bir parçacığın ekrandaki yeri; şimdilik rastgele bir serpinti gibi.';
+    return 'Dedektör açık: <b>saçaklar kayboldu.</b> Hangi yoldan geçtiği bilinen parçacık girişim yapmıyor. Geriye iki tek-yarık deseninin toplamı, yani düz bir tepe kalıyor.';
+  }
+  if (N < 40) return 'Yarıklardan geçen dalga girişim yapıyor. Aşağıdaki her nokta <b>tek bir parçacığın</b> ekrandaki yeri; şimdilik rastgele bir serpinti gibi görünüyor.';
+  if (N < 500) return 'Saçaklar yavaş yavaş belirmeye başladı. Hiçbir parçacık, dalganın söndürdüğü <b>koyu bölgelere</b> düşmüyor.';
+  return '<b>Girişim saçakları net.</b> Tek tek rastgele, hepsi birlikte dalga: her parçacık iki yarıktan birden geçmiş gibi davranıyor.';
+}
+const capEl = $('#caption'); let capKey = '';
+function updateCaption() { const t = captionText(); if (t !== capKey) { capKey = t; capEl.innerHTML = t; } }
+
+/* ------------------------------------------------------------------ *
+ *  Arayüz
+ * ------------------------------------------------------------------ */
+const el = { lam: $('#lam'), d: $('#d'), a: $('#a'), speed: $('#speed'), rate: $('#rate'), expo: $('#expo'), det: $('#det'), theory: $('#theory') };
+const paint = i => i.style.setProperty('--p', ((i.value - i.min) / (i.max - i.min) * 100) + '%');
+function syncUI() {
+  el.lam.value = params.lam; el.d.value = params.d; el.a.value = params.a; el.speed.value = params.speed;
+  el.rate.value = params.rate; el.expo.value = params.expo; el.det.checked = params.det; el.theory.checked = params.theory;
+  $('#oLam').textContent = params.lam; $('#oD').textContent = params.d; $('#oA').textContent = params.a;
+  $('#oSpeed').textContent = String(SPEEDS[params.speed]).replace('.', ',') + '×';
+  const r = rateVal(); $('#oRate').textContent = fmt(Math.round(r)) + ' /sn';
+  $('#oExpo').textContent = fmt(params.expo / 100, 1);
+  for (const k of ['lam', 'd', 'a', 'speed', 'rate', 'expo']) paint(el[k]);
+  for (const b of $('#segMode').children) b.classList.toggle('on', b.dataset.v === params.mode);
+  for (const b of $('#segView').children) b.classList.toggle('on', +b.dataset.v === params.view);
+  $('#rowRate').classList.toggle('hide', params.mode !== 'cont');
+  $('#btnPlay').textContent = S.running ? 'Duraklat' : 'Devam et';
+  $('#detNote').textContent = params.det
+    ? 'Dedektör açık: her parçacığın yolu kaydediliyor, dalgalar artık girişim yapmıyor.'
+    : 'Kapalı: parçacığın hangi yarıktan geçtiği hiçbir yerde kaydedilmiyor.';
+}
+function changed(needRestart) { syncUI(); if (needRestart) S.dirty = true; }
+function bind(key, restart_, conv = v => +v) {
+  el[key].addEventListener('input', () => { params[key] = conv(el[key].value); changed(restart_); });
+}
+bind('lam', true); bind('speed', false); bind('rate', false); bind('expo', false);
+el.d.addEventListener('input', () => { params.d = +el.d.value; if (params.a > params.d - 12) params.a = params.d - 12; changed(true); });
+el.a.addEventListener('input', () => { params.a = +el.a.value; if (params.d < params.a + 12) params.d = Math.min(200, params.a + 12); changed(true); });
+el.det.addEventListener('change', () => { params.det = el.det.checked; changed(true); });
+el.theory.addEventListener('change', () => { params.theory = el.theory.checked; });
+$('#segMode').addEventListener('click', e => { const v = e.target.dataset?.v; if (v && v !== params.mode) { params.mode = v; changed(true); } });
+$('#segView').addEventListener('click', e => { const v = e.target.dataset?.v; if (v != null) { params.view = +v; syncUI(); } });
+const PRESETS = {
+  base: { lam: 12, d: 112, a: 30, det: false }, det: { lam: 12, d: 112, a: 30, det: true },
+  wide: { lam: 12, d: 180, a: 30, det: false }, narrow: { lam: 12, d: 112, a: 14, det: false },
+  long: { lam: 18, d: 112, a: 30, det: false },
+};
+$('#chips').addEventListener('click', e => { const p = PRESETS[e.target.dataset?.p]; if (p) { Object.assign(params, p); changed(true); } });
+$('#btnPlay').addEventListener('click', () => { S.running = !S.running; syncUI(); });
+$('#btnReset').addEventListener('click', () => { S.dirty = true; });
+for (const b of document.querySelectorAll('[data-add]')) b.addEventListener('click', () => { S.pending += +b.dataset.add; });
+window.addEventListener('keydown', e => {
+  const t = e.target.tagName; if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.code === 'Space' && !/INPUT|TEXTAREA|SELECT|BUTTON/.test(t)) { e.preventDefault(); S.running = !S.running; syncUI(); }
+  else if (e.key === 'r' || e.key === 'R') { S.dirty = true; }
+  else if (e.key === 'd' || e.key === 'D') { params.det = !params.det; changed(true); }
+  else if (e.key === 'm' || e.key === 'M') { params.mode = params.mode === 'cont' ? 'shot' : 'cont'; changed(true); }
+});
+
+let statKey = '';
+function updateStats(force) {
+  const m = S.metrics, s0 = expectedSpacing();
+  const key = [S.N, m.V.toFixed(3), m.sp && m.sp.toFixed(1), m.ref && m.ref.toFixed(1), params.lam, params.d, !!S.pc].join('|');
+  if (key === statKey && !force) return; statKey = key;
+  $('#stN').textContent = fmt(S.N);
+  if (S.pc) { $('#stV').textContent = fmt(m.V, 2); $('#vbar').style.width = (clamp(m.V, 0, 1) * 100) + '%'; }
+  else { $('#stV').textContent = '—'; $('#vbar').style.width = '0'; }
+  $('#stSp').textContent = S.pc && m.sp ? fmt(m.sp, 1) + ' birim' : '—';
+  $('#stSp2').textContent = S.pc && m.sp && m.ref ? `iki kaynak kuramı ${fmt(m.ref, 1)} · λL/d = ${fmt(s0, 1)}` : `λL/d = ${fmt(s0, 1)}`;
+}
+
+/* ------------------------------------------------------------------ *
+ *  Boyutlandırma ve ana döngü
+ * ------------------------------------------------------------------ */
+function resize() {
+  const r = scope.getBoundingClientRect(); if (r.width < 10) return;
+  dprC = Math.min(window.devicePixelRatio || 1, 2);
+  ov.width = Math.round(r.width * dprC); ov.height = Math.round(r.height * dprC);
+  glc.width = Math.max(2, Math.round(r.width * dprC * WW / LW)); glc.height = Math.max(2, Math.round(r.height * dprC * WH / LH));
+  sc = ov.width / LW; cs = sc / dprC;
+  rebuildDots();
+}
+new ResizeObserver(resize).observe(scope);
+
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dtMs = clamp(now - (S.last || now), 0, 50); S.last = now; S.now = now; S.frame++;
+  S.ema += (dtMs - S.ema) * 0.05;
+  S.perf = S.ema > 26 ? Math.max(0.35, S.perf * 0.97) : Math.min(1, S.perf * 1.01);
+  if (S.dirty) { S.dirty = false; restart(); }
+  if (S.running) advance(dtMs);
+  if (STOP && S.simT >= STOP && S.running) { S.running = false; syncUI(); }
+  pour();
+  renderGL(); drawOverlay(); updateCaption(); updateStats(false);
+  if (DBG) dbg();
+}
+
+const DBG = qs.has('debug'), dbgEl = document.createElement('pre');
+if (DBG) { dbgEl.id = 'dbg'; dbgEl.style.cssText = 'position:fixed;right:8px;bottom:8px;margin:0;padding:6px 9px;background:rgba(0,0,0,.7);color:#9f9;font:11px monospace;z-index:9'; document.body.appendChild(dbgEl); }
+function dbg() {
+  const m = S.metrics;
+  dbgEl.textContent = JSON.stringify({ t: +S.simT.toFixed(1), N: S.N, shots: S.shots, ready: S.ready, V: +m.V.toFixed(3), sp: m.sp, exp: +expectedSpacing().toFixed(2), nMax: m.nMax, fps: +(1000 / S.ema).toFixed(0), perf: +S.perf.toFixed(2), ov: [ov.width, ov.height], gl: [glc.width, glc.height], err: gl.getError() });
+}
+window.__dq = { S, params };
+
+derive(); restart(); S.pending = num('n', 0); syncUI(); resize();
+requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>

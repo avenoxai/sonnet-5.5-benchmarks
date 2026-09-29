@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>renderer test scene</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0c0e;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;color:#e9e9ea}
+  canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;outline:none;touch-action:none;cursor:grab}
+  #loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0b0c0e;z-index:10;transition:opacity .6s}
+  #loading .t{letter-spacing:.42em;font-size:12px;font-weight:300;text-transform:uppercase;opacity:.8}
+  #loading .bar{width:240px;height:1px;background:rgba(255,255,255,.12);margin-top:20px;overflow:hidden}
+  #loading .bar i{display:block;height:100%;width:0;background:#d5001c;transition:width .25s}
+  #loading .s{margin-top:14px;font-size:10px;letter-spacing:.22em;text-transform:uppercase;opacity:.42;min-height:14px}
+  #ui{position:fixed;inset:0;z-index:5}
+</style>
+</head>
+<body>
+<canvas id="c" tabindex="0"></canvas>
+<div id="loading"><div class="t">renderer test</div><div class="bar"><i id="loadbar"></i></div><div class="s" id="loadtext">starting…</div></div>
+<div id="ui"></div>
+<!-- the real script list plus our own module below. The car modules are NOT built here unless ?mods=all (or mods=body,wheels ...) is given: this page tests the renderer / modelling tools. -->
+<script>if (!/[?&]mods=/.test(location.search)) history.replaceState(null, '', location.search ? location.search + '&mods=testscene' : '?mods=testscene');</script>
+<script src="../js/core.js"></script>
+<script src="../js/geo.js"></script>
+<script src="../js/sdf.js"></script>
+<script src="../js/renderer.js"></script>
+<script src="../js/car/spec.js"></script>
+<script>
+// ================================================================================================================
+// Renderer test scene. Query parameters (all app.js parameters work too: shot=1 cam=<preset> env=<name> paint=<i|#hex> bloom=0 ...):
+//   (default)  material spheres (paint, carbon, plastic, brushed, chrome, rubber, alcantara, gold), hook plate with AA mask, tinted glass
+//              over an emissive strip + a second overlapping pane (sorting) + additive glow, animated part with orbiting child, knurl
+//              cylinder, carbon box without uvs, alcantara box.   presets: testrow testhero glass hookEdge matsLeft matsRight ...
+//   car=1      stand-in car (SDF body, glass, wheels, DRS wing, tail bar) on the studio floor: judge reflections, shadows, contact,
+//              bloom of the emissive bars.  presets: hero side front34 rear34 ... carLow carRefl carTop carWing
+//   paints=1   eight paint colours (red yellow blue white black metallic-black silver green orange): tone mapping test.  presets: paints paintsL paintsR
+//   heavy=N    N dense spheres (~131k triangles each; heavy=30 -> ~4 M triangles) around the origin: performance test.  preset: heavy
+//   slab=1     car-sized slab + tyre to check the floor shadow / AO.                preset: slab
+// Useful eval snippets (node tools/shot.js --eval ...): PG_APP.renderer.settings.debugFloor = 'refl'|'shadow'|'ao'|'dist';
+//   PG_APP.renderer.setQuality('low'); PG_APP.stats(); PG_APP.renderer.stats.gpuMs.
+// ================================================================================================================
+// ---------------------------------------------------------------- tiny inline mesh generators (no dependency on js/geo.js)
+function T_sphere(nu, nv, R, uvScale) {
+  const pos = [], nor = [], uv = [], idx = []; uvScale = uvScale || [1, 1];
+  for (let j = 0; j <= nv; j++) { const v = j / nv, th = v * Math.PI;
+    for (let i = 0; i <= nu; i++) { const u = i / nu, ph = u * Math.PI * 2;
+      const x = Math.sin(th) * Math.cos(ph), y = Math.cos(th), z = Math.sin(th) * Math.sin(ph);
+      pos.push(x * R, y * R, z * R); nor.push(x, y, z); uv.push(u * uvScale[0], (1 - v) * uvScale[1]); } }
+  for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * (nu + 1) + i, b = a + nu + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+  return { positions: new Float32Array(pos), normals: new Float32Array(nor), uvs: new Float32Array(uv), indices: new Uint32Array(idx) };
+}
+function T_box(sx, sy, sz, withUV) {
+  const pos = [], nor = [], uv = [], idx = [];
+  const faces = [[[1,0,0],[0,1,0],[0,0,1]], [[-1,0,0],[0,0,1],[0,1,0]], [[0,1,0],[0,0,1],[1,0,0]], [[0,-1,0],[1,0,0],[0,0,1]], [[0,0,1],[1,0,0],[0,1,0]], [[0,0,-1],[0,1,0],[1,0,0]]];
+  const h = [sx / 2, sy / 2, sz / 2];
+  for (const [n, u, v] of faces) {
+    const base = pos.length / 3;
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      pos.push((n[0] + u[0] * a + v[0] * b) * h[0], (n[1] + u[1] * a + v[1] * b) * h[1], (n[2] + u[2] * a + v[2] * b) * h[2]);
+      nor.push(n[0], n[1], n[2]); uv.push((a + 1) / 2, (b + 1) / 2);
+    }
+    idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+  }
+  const m = { positions: new Float32Array(pos), normals: new Float32Array(nor), indices: new Uint32Array(idx) };
+  if (withUV !== false) m.uvs = new Float32Array(uv);
+  return m;
+}
+function T_cyl(nu, R, H, uvMetres) { // along Y, sides only, uv in metres (u = arc length, v = height)
+  const pos = [], nor = [], uv = [], idx = [];
+  for (let j = 0; j <= 1; j++) for (let i = 0; i <= nu; i++) { const a = i / nu * Math.PI * 2, x = Math.cos(a), z = Math.sin(a);
+    pos.push(x * R, j * H, z * R); nor.push(x, 0, z); uv.push(a * R, j * H); }
+  for (let i = 0; i < nu; i++) { const a = i, b = i + nu + 1; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+  return { positions: new Float32Array(pos), normals: new Float32Array(nor), uvs: new Float32Array(uv), indices: new Uint32Array(idx) };
+}
+
+function T_cylClosed(nu, R, H) { // along Y (centred), sides + caps, uv in metres
+  const pos = [], nor = [], uv = [], idx = [];
+  const side = T_cyl(nu, R, H);
+  for (let i = 0; i < side.positions.length; i += 3) { pos.push(side.positions[i], side.positions[i + 1] - H / 2, side.positions[i + 2]); nor.push(side.normals[i], side.normals[i + 1], side.normals[i + 2]); }
+  for (let i = 0; i < side.uvs.length; i++) uv.push(side.uvs[i]);
+  for (const i of side.indices) idx.push(i);
+  for (const sgn of [1, -1]) {
+    const c = pos.length / 3; pos.push(0, sgn * H / 2, 0); nor.push(0, sgn, 0); uv.push(0, 0);
+    for (let i = 0; i <= nu; i++) { const a = i / nu * Math.PI * 2; pos.push(Math.cos(a) * R, sgn * H / 2, Math.sin(a) * R); nor.push(0, sgn, 0); uv.push(Math.cos(a) * R, Math.sin(a) * R); }
+    for (let i = 0; i < nu; i++) { if (sgn > 0) idx.push(c, c + 2 + i, c + 1 + i); else idx.push(c, c + 1 + i, c + 2 + i); }
+  }
+  return { positions: new Float32Array(pos), normals: new Float32Array(nor), uvs: new Float32Array(uv), indices: new Uint32Array(idx) };
+}
+
+// ---------------------------------------------------------------- stand-in car (?car=1): smooth glossy coupe body from the SDF mesher,
+// tinted glass, four wheels, a wing and an emissive tail bar. Only used to judge reflections, shadows and contact on car-sized geometry.
+async function buildStandInCar(ctx) {
+  const { m4, mats, util } = ctx, hex = util.hex, r = ctx.renderer, gl = ctx.gl;
+  ctx.progress('stand-in car body', 0.2);
+  const body = await PG.sdf.mesh(gl, { label: 'standin', voxel: 0.011 * ctx.quality, min: [-2.45, 0, -1.05], max: [2.45, 1.45, 1.05], aoScale: 0.2, glsl: `
+float map(vec3 p) {
+  p.z = abs(p.z);
+  float x = p.x;
+  float hw = 0.93 - 0.19 * smoothstep(0.9, 2.25, x) - 0.10 * (1.0 - smoothstep(-2.3, -1.5, x));
+  float hull = sdRoundBox(p - vec3(0.0, 0.53, 0.0), vec3(2.26, 0.43, hw), 0.26);
+  hull = smax(hull, dot(p - vec3(2.2, 0.50, 0.0), normalize(vec3(0.62, 1.0, 0.0))), 0.22);       // sloped nose / bonnet
+  hull = smax(hull, dot(p - vec3(-2.25, 0.62, 0.0), normalize(vec3(-0.55, 1.0, 0.0))), 0.20);    // sloped tail
+  float fF = sdEllipsoid(p - vec3(1.23, 0.72, 0.80), vec3(0.66, 0.20, 0.22));
+  float fR = sdEllipsoid(p - vec3(-1.23, 0.78, 0.82), vec3(0.74, 0.22, 0.24));
+  float d = smin(smin(hull, fF, 0.25), fR, 0.25);
+  float cab = sdEllipsoid(p - vec3(-0.42, 0.98, 0.0), vec3(1.22, 0.36, 0.74));
+  d = smin(d, cab, 0.30);
+  float slot = sdBox(p - vec3(-0.38, 1.03, 0.0), vec3(0.78, 0.12, 2.0));
+  d = smax(d, -slot, 0.02);
+  float wellF = max(length(p.xy - vec2(1.2285, 0.35)) - 0.44, 0.62 - p.z);
+  float wellR = max(length(p.xy - vec2(-1.2285, 0.364)) - 0.46, 0.60 - p.z);
+  d = smax(d, -min(wellF, wellR), 0.03);
+  return d;
+}` });
+  const paint = ctx.add({ name: 'body', mesh: body, material: mats.paint, matrix: m4.identity() });
+  // glass in the window slot (double-sided alpha)
+  const glassMat = mats.glass.clone({ name: 'standinGlass', alpha: 0.7 });
+  ctx.add({ name: 'glass', mesh: T_box(1.5, 0.23, 1.44), material: glassMat, matrix: m4.translation(-0.38, 1.03, 0) });
+  // wheels
+  const tireGpu = r.upload(T_cylClosed(64, 0.35, 0.277)), rimGpu = r.upload(T_cylClosed(48, 0.255, 0.26)), discGpu = r.upload(T_cylClosed(48, 0.2, 0.05));
+  const rearTire = r.upload(T_cylClosed(64, 0.364, 0.32)), rearRim = r.upload(T_cylClosed(48, 0.27, 0.30));
+  const wheels = [];
+  for (const [ax, x, R, zt, tg, rg] of [['f', 1.2285, 0.35, 0.815, tireGpu, rimGpu], ['r', -1.2285, 0.364, 0.79, rearTire, rearRim]]) {
+    for (const sd of [-1, 1]) {
+      const M = m4.chain(m4.translation(x, R, sd * zt), m4.rotationX(Math.PI / 2));
+      const t = ctx.add({ name: 'wheel.' + ax + (sd < 0 ? 'L' : 'R') + '.tyre', mesh: tg, material: mats.tire, matrix: M });
+      ctx.add({ name: 'wheel.' + ax + (sd < 0 ? 'L' : 'R') + '.rim', mesh: rg, material: mats.wheel, matrix: m4.multiply(M, m4.translation(0, sd > 0 ? 0.02 : -0.02, 0)) });
+      ctx.add({ name: 'wheel.' + ax + (sd < 0 ? 'L' : 'R') + '.disc', mesh: discGpu, material: mats.discCeramic, matrix: m4.multiply(M, m4.translation(0, sd > 0 ? -0.09 : 0.09, 0)) });
+      wheels.push({ M, x, R, sd, tyre: t });
+    }
+  }
+  // rear wing: two element plate + uprights + endplates, DRS flap driven by PG.state.drs
+  const wingY = 1.28, wx = -2.12;
+  ctx.add({ name: 'wing.main', mesh: T_box(0.34, 0.025, 1.78), material: mats.carbonTwill, matrix: m4.translation(wx, wingY, 0) });
+  const flap = ctx.add({ name: 'wing.flap', mesh: T_box(0.22, 0.02, 1.76), material: mats.carbonTwill, matrix: m4.translation(wx - 0.24, wingY + 0.05, 0) });
+  for (const sd of [-1, 1]) {
+    ctx.add({ name: 'wing.strut', mesh: T_box(0.05, 0.28, 0.03), material: mats.carbonMatte, matrix: m4.translation(wx + 0.05, wingY - 0.15, sd * 0.55) });
+    ctx.add({ name: 'wing.plate', mesh: T_box(0.5, 0.2, 0.012), material: mats.carbonMatte, matrix: m4.translation(wx - 0.08, wingY + 0.02, sd * 0.9) });
+  }
+  ctx.onUpdate((dt, t, st) => { m4.multiply(m4.translation(wx - 0.24, wingY + 0.05, 0), m4.rotationZ(st.drs * 0.55), flap.matrix); });
+  // lights
+  const tail = new PG.Material({ name: 'standinTail', baseColor: hex('#300506'), roughness: 0.2, emissive: [1.0, 0.03, 0.015], emissiveIntensity: 1.6, clearcoat: 0.6, hook: 'void surfaceHook(inout Surf s, in Frag f) { s.emissive *= 0.45 + 2.4 * uBrake; }' });
+  ctx.add({ name: 'lights.tail', mesh: T_box(0.05, 0.05, 1.5), material: tail, matrix: m4.translation(-2.05, 0.9, 0) });
+  for (const sd of [-1, 1]) ctx.add({ name: 'lights.head', mesh: T_box(0.05, 0.07, 0.34), material: mats.whiteLED, matrix: m4.chain(m4.translation(2.1, 0.7, sd * 0.62), m4.rotationY(sd * 0.35)) });
+  // wheel spin
+  let ang = 0;
+  ctx.onUpdate((dt, t, st) => {
+    ang += dt * 9 * st.spin;
+    for (const w of wheels) { w.tyre.matrix; }
+  });
+  return paint;
+}
+
+// ---------------------------------------------------------------- automated self test (?selftest=1): Material.derive, GPUMesh.subset, setOrtho, ortho/scan/overlay, debug modes, probes
+//   node tools/shot.js --url "tools/test_scene.html?shot=1&selftest=1&mods=testscene" --out shots/st.png --wait "window.__selftest" --eval "JSON.stringify(window.__selftest)" --logs
+// window.__selftest = { pass: bool, results: [{name, pass, info}] }; failing checks are printed with console.error.
+async function runSelfTests(ctx) {
+  const R = [], ok = (name, cond, info) => { R.push({ name, pass: !!cond, info: info === undefined ? '' : String(info) }); if (!cond) console.error('[selftest] FAIL ' + name + ' ' + (info === undefined ? '' : info)); };
+  const r = ctx.renderer, gl = r.gl, m4 = ctx.m4, mats = ctx.mats, near = (a, b, t) => Math.abs(a - b) <= t;
+  try {
+    // ---- PG.Material.derive: live link, own fields, detaching, chaining
+    const P = mats.paint, saveC = P.baseColor.slice(), saveR = P.roughness;
+    const d = P.derive({ name: 'st.derived', hook: 'void surfaceHook(inout Surf s, in Frag f) {}', doubleSided: true });
+    ok('derive: own fields', d.hook.includes('surfaceHook') && d.doubleSided === true && d.name === 'st.derived');
+    P.baseColor = [0.1, 0.2, 0.3]; ok('derive: follows the parent colour', d.baseColor[0] === 0.1 && d.baseColor[2] === 0.3);
+    P.roughness = 0.77; ok('derive: follows a parent scalar', d.roughness === 0.77);
+    d.roughness = 0.11; P.roughness = 0.6; ok('derive: assigning detaches that field only', d.roughness === 0.11 && P.roughness === 0.6 && d.baseColor[0] === 0.1);
+    ok('derive: parent unchanged', P.hook === '' && P.doubleSided === false);
+    const d2 = d.derive({ metallic: 1 }); P.baseColor = [0.5, 0.5, 0.5];
+    ok('derive: chains (child of a derived material)', d2.baseColor[0] === 0.5 && d2.metallic === 1 && d2.hook === d.hook);
+    ok('derive: unique ids', d.id !== P.id && d2.id !== d.id);
+    P.baseColor = saveC; P.roughness = saveR;
+
+    // ---- GPUMesh.subset
+    const gpu = r.upload(T_sphere(40, 20, 0.4)), nT = gpu.triCount, idx = gpu._idx;
+    const half = idx.slice(0, (nT >> 1) * 3), sub = gpu.subset(half);
+    ok('subset: triangle count', sub.triCount === (nT >> 1), sub.triCount + ' of ' + nT);
+    ok('subset: shares the vertex buffers', sub.sharedBuffers === gpu.buffers && sub.vertexCount === gpu.vertexCount && sub.vao !== gpu.vao);
+    const sub2 = sub.subset(half.slice(0, 30)); ok('subset: of a subset', sub2.triCount === 10 && sub2.sharedBuffers === gpu.buffers);
+    ok('subset: bounds of the used vertices only', sub.bounds.radius <= gpu.bounds.radius + 1e-6);
+    const pFull = ctx.add({ name: 'st.full', mesh: gpu, material: mats.plasticBlack, matrix: m4.translation(0, 0.5, 0) });
+    const pSub = ctx.add({ name: 'st.sub', mesh: sub, material: d, matrix: m4.translation(1, 0.5, 0) });
+    const pSub2 = ctx.add({ name: 'st.sub2', mesh: sub2, material: mats.carbonTwill, matrix: m4.translation(2, 0.5, 0) });
+    await r.whenProgramsReady();
+    const trisOf = name => { r.filter = p => p.name === name; r.render(0); return r.stats.tris; };
+    ok('subset: draws only its triangles (part)', trisOf('st.sub') === sub.triCount, r.stats.tris);
+    ok('subset: draws only its triangles (part of a subset)', trisOf('st.sub2') === 10, r.stats.tris);
+    ok('subset: parent draws everything', trisOf('st.full') === nT, r.stats.tris);
+    r.removePart(pSub2); sub2.dispose(); r.removePart(pSub); sub.dispose(); ok('subset: dispose leaves the parent drawable', trisOf('st.full') === nT && gl.getError() === 0);
+    r.removePart(pFull);
+
+    // ---- true orthographic projection (r.setOrtho): no perspective foreshortening, exact scale, near/far cover the car
+    r.setOrtho([0, 0.7, -60], [0, 0.7, 0], 1.0, { up: [0, 1, 0] }); r.render(0);
+    const proj = (x, y, z) => { const m = r.viewProj, w = m[3] * x + m[7] * y + m[11] * z + m[15]; return [(m[0] * x + m[4] * y + m[8] * z + m[12]) / w, (m[1] * x + m[5] * y + m[9] * z + m[13]) / w, (m[2] * x + m[6] * y + m[10] * z + m[14]) / w, w]; };
+    const a = proj(0.5, 0.2, -1.5), b = proj(0.5, 0.2, 1.5), asp = r.width / r.height;
+    ok('ortho: same screen position at every depth', near(a[0], b[0], 1e-6) && near(a[1], b[1], 1e-6) && near(a[3], 1, 1e-9), a.join(','));
+    ok('ortho: 1 m along the view right axis = 1/(halfHeight*aspect) ndc, y: 1/halfHeight', near(proj(-1, 0.7, 0)[0], 1 / asp, 1e-6) && near(proj(0, 1.7, 0)[1], 1, 1e-6));
+    ok('ortho: depth inside 0..1 for the whole car box', [[-2.45, 0, -1.1], [2.4, 1.62, 1.1], [0, 0, 0]].every(q => { const z = proj(q[0], q[1], q[2])[2]; return z > -1 && z < 1; }));
+    ok('ortho: renderer flag', r.cam.ortho === true);
+    r.setCamera([3, 2, 3], [0, 0.5, 0], 30); r.render(0); ok('ortho: setCamera returns to perspective', r.cam.ortho === false && Math.abs(proj(0.5, 0.2, -1.5)[3] - 1) > 1e-3);
+
+    // ---- app level: ortho presets, scan, silhouette / zebra, overlay, probes
+    for (const n of ['oside', 'osider', 'otop', 'ofront', 'orear']) ok('preset ' + n, !!PG_APP.presets[n] && PG_APP.presets[n].ortho === true);
+    for (const n of ['front34', 'front34r', 'rear34', 'rear34r', 'side', 'sider', 'front', 'rear', 'top', 'low', 'wheelF', 'wheelR', 'wheelFr', 'wheelRr', 'wing', 'nose', 'tail', 'cockpit', 'hero', 'rearhi', 'frontlow', 'roof', 'sillL', 'lidL', 'tailL']) if (!PG_APP.presets[n]) ok('preset ' + n, false, 'missing');
+    for (const n of Object.keys(PG_APP.presets)) {       // no perspective preset may put the eye under (or into) the floor; ortho presets must switch to ortho
+      await PG_APP.setCamera(n); const c = PG_APP.getCamera(), p = PG_APP.presets[n];
+      ok('camera ' + n + (p.ortho ? ' (ortho)' : ''), p.ortho ? (c.ortho && !!c.view) : (!c.ortho && c.eye[1] > 0.05 && c.dist >= 0.15), 'eye ' + c.eye.map(v => v.toFixed(2)) + (c.view ? ' view ' + c.view : ''));
+    }
+    await PG_APP.setCamera('hero');
+    const box = ctx.add({ name: 'st.box', mesh: r.upload(T_box(1.0, 0.5, 0.3)), material: mats.plasticBlack, matrix: m4.translation(0.3, 0.9, 0) });
+    PG_APP.setFilters({ only: ['st.box'] });
+    const side = await PG_APP.scan({ view: 'side', step: 0.25, range: [-0.5, 1.0] });
+    const row = side.rows.find(q => near(q.h, 0.25, 1e-6));
+    ok('scan side: y top / bottom within 1 mm', row && near(row.hi, 1.15, 0.001) && near(row.lo, 0.65, 0.001), row && (row.hi + ' ' + row.lo));
+    ok('scan side: x extent within 1 mm', side.extent && near(side.extent.hMin, -0.2, 0.001) && near(side.extent.hMax, 0.8, 0.001), JSON.stringify(side.extent));
+    ok('scan side: empty columns are null', side.rows.find(q => near(q.h, -0.5, 1e-6)).hi === null);
+    const top = await PG_APP.scan({ view: 'top', step: 0.25, range: [0, 0.5] });
+    ok('scan top: half width within 1 mm', top.rows.every(q => near(q.hi, 0.15, 0.001) && near(q.lo, -0.15, 0.001)), JSON.stringify(top.rows[0]));
+    const front = await PG_APP.scan({ view: 'front', step: 0.1, range: [-0.3, 0.3] });
+    ok('scan front: y range within 1 mm', front.rows.every(q => q.hi === null || (near(q.hi, 1.15, 0.001) && near(q.lo, 0.65, 0.001))) && front.extent && near(front.extent.hMax - front.extent.hMin, 0.3, 0.001), JSON.stringify(front.extent));
+    ok('scan restores the camera and debug mode', PG_APP.getCamera().ortho === false && r.settings.debug === '');
+    // silhouette: white background everywhere, flat grey car, no vignette / grain
+    r.settings.debug = 'silhouette'; await PG_APP.setCamera('oside'); PG_APP.setOverlay(false);
+    PG_APP.getCamera(); r.render(0);
+    const px = r.readPixels(), W = r.width, H = r.height, at = (x, y) => { const o = ((H - 1 - y) * W + x) * 4; return [px[o], px[o + 1], px[o + 2]]; };
+    const c0 = at(2, 2), c1 = at(W - 3, H - 3), cm = at(W >> 1, H >> 1);
+    ok('silhouette: pure white background (no vignette / grain / dither)', c0.every(v => v === 255) && c1.every(v => v === 255), c0 + ' | ' + c1);
+    let grey = 0; for (let i = 0; i < W * H * 4; i += 4) if (px[i] > 55 && px[i] < 70) grey++;
+    ok('silhouette: the box is flat dark grey (sRGB ~63)', grey > 1000 && cm[0] > 55 && cm[0] < 70 || grey > 1000, 'grey px ' + grey + ' centre ' + cm);
+    r.settings.debug = 'zebra'; r.render(0); const pz = r.readPixels(); let dark = 0, light = 0; for (let i = 0; i < W * H * 4; i += 4) { if (pz[i] < 40) dark++; else if (pz[i] > 200) light++; }
+    ok('zebra: renders (some black and some white stripe pixels) without GL errors', gl.getError() === 0 && dark > 0 && light > 0, dark + ' dark, ' + light + ' light');
+    r.settings.debug = '';
+    // overlay canvas: drawn in ortho, cleared in perspective
+    PG_APP.setOverlay(true); await PG_APP.setCamera('oside'); r.render(0);
+    const oc = document.getElementById('overlay'), tmp = document.createElement('canvas'), tg = tmp.getContext('2d', { willReadFrequently: true }), drawn = () => { tmp.width = oc.width; tmp.height = oc.height; tg.drawImage(oc, 0, 0); const d = tg.getImageData(0, 0, oc.width, oc.height).data; let n = 0; for (let i = 3; i < d.length; i += 4 * 97) if (d[i]) n++; return n; };
+    ok('overlay: drawn in an ortho view', PG_APP.getOverlay() === true && drawn() > 50, drawn());
+    await PG_APP.setCamera('front34'); await new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+    ok('overlay: harmlessly cleared in perspective', drawn() === 0, drawn());
+    ok('overlay: modes', PG_APP.setOverlay('refs') === 'refs' && PG_APP.setOverlay('grid') === 'grid' && PG_APP.setOverlay(false) === false && PG_APP.setOverlay(true) === true);
+    PG_APP.setOverlay(false);
+    const ref = PG_APP.reference(); ok('reference: tables', ref.top.length >= 10 && ref.plan.length >= 10 && ref.outline.length > 15 && ref.anchors.length > 10);
+    const ra = PG_APP.referenceAt('side', [-0.3, 1.35], false); ok('referenceAt: roof peak / hood mid', near(ra.top[0], PG.spec.profile.roofPeakY, 1e-6) && near(ra.top[1], PG.spec.profile.hoodMidY, 1e-6));
+    // probes: tolerant without a body, working with one
+    const hasBody = PG_APP.builtModules.includes('body');
+    if (!hasBody) ok('probe: returns null without a body module (no throw)', PG_APP.probe(0, 0) === null && PG_APP.probeAt([0, 2, 0], [0, -1, 0]) === null && PG_APP.raycaster() === null);
+    else { const pr = PG_APP.probe(-0.2, 0); ok('probe: top hit above the roof height', pr && pr.found && pr.top > 1.0, JSON.stringify(pr && pr.top)); }
+    ok('probe: unknown module -> null', PG_APP.probe(0, 0, { module: 'nonesuch' }) === null);
+    ok('no GL error at the end', gl.getError() === 0);
+  } catch (e) { ok('self test threw', false, e && e.stack || e); }
+  r.filter = null; PG_APP.setFilters({ only: [], hide: [] });
+  window.__selftest = { pass: R.every(q => q.pass), results: R };
+  console.log('[selftest] ' + R.filter(q => q.pass).length + '/' + R.length + ' passed');
+}
+
+PG.registerModule({ name: 'testscene', order: 10, async build(ctx) {
+  const { m4, mats, util } = ctx, hex = util.hex, r = ctx.renderer;
+  const Q = ctx.params, CAR = Q.get('car') === '1', PAINTS = Q.get('paints') === '1', HEAVY = Q.has('heavy') ? Math.max(1, +Q.get('heavy') || 30) : 0;
+  const P = PG_APP.presets;
+  ctx.progress('meshes', 0.1);
+  const sph = r.upload(T_sphere(128, 64, 0.45));
+  const xs = i => (i - 3.5) * 1.2;
+
+  if (CAR) {
+    await buildStandInCar(ctx);
+    P.carLow = { az: -25, el: 3, dist: 5.6, target: [0.2, 0.35, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+    P.carRefl = { az: -50, el: 6, dist: 4.6, target: [1.2, 0.2, -0.2], fov: 30, limits: { min: 0.3, max: 16 } };
+    P.carTop = { az: -60, el: 55, dist: 8.5, target: [0, 0.3, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+    P.carWing = { az: -140, el: 15, dist: 3.7, target: [-2.05, 1.05, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+  } else if (PAINTS) {
+    // paint / tone-mapping test: red, yellow, blue, white, black, silver, green, orange
+    const list = [['#c9151e', 0], ['#f5c400', 0], ['#1f6fc4', 0], ['#f1f2f0', 0], ['#0d0d10', 0.45], ['#a4a8ac', 0.75], ['#55b02c', 0], ['#e86a10', 0]];
+    list.forEach(([h, mt], i) => ctx.add({ name: 'paint.' + i, mesh: sph, matrix: m4.translation(xs(i), 0.45, 0),
+      material: mats.paint.clone({ name: 'pt' + i, baseColor: hex(h), metallic: Math.min(0.75, mt * 0.95), flake: Math.min(1, mt * 1.5), roughness: 0.42 - mt * 0.1 }) }));
+    P.paints = { az: 90, el: 10, dist: 11.2, target: [0, 0.5, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+    P.paintsL = { az: 70, el: 12, dist: 6.4, target: [-2.4, 0.5, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+    P.paintsR = { az: 110, el: 12, dist: 6.4, target: [2.4, 0.5, 0], fov: 30, limits: { min: 0.3, max: 16 } };
+  } else {
+    const row = [
+      ['paint', mats.paint.clone({ name: 'testPaint', baseColor: hex('#c8102e'), metallic: 0.5, flake: 0.85, roughness: 0.38 })],
+      ['carbon', mats.carbonTwill],
+      ['plastic', mats.plasticBlack],
+      ['brushed', mats.aluminum],
+      ['chrome', mats.chrome],
+      ['rubber', mats.rubber],
+      ['alcantara', mats.alcantara],
+      ['gold', mats.wheel.clone({ name: 'testGold', baseColor: hex('#b8893a'), metallic: 1, roughness: 0.3 })],
+    ];
+    row.forEach(([n, m], i) => ctx.add({ name: 'row.' + n, mesh: sph, material: m, matrix: m4.translation(xs(i), 0.45, 0) }));
+
+    // back row ------------------------------------------------------------------------------------------
+    const zb = -2.3;
+    // hook material with mask + AA edge (disc + ring on a plate)
+    const hookMat = new PG.Material({ name: 'hookPlate', baseColor: hex('#25272b'), roughness: 0.45, clearcoat: 1, clearcoatRoughness: 0.03,
+      uniforms: { uDisc: [0.95, 0.72, 0.1] },
+      hook: `uniform vec3 uDisc;
+void surfaceHook(inout Surf s, in Frag f) {
+  vec2 p = f.pObj.xy;
+  float d = length(p) - 0.3;
+  float m = 1.0 - smoothstep(-f.fw, f.fw, d);
+  float ring = abs(length(p) - 0.46) - 0.015;
+  float m2 = 1.0 - smoothstep(-f.fw, f.fw, ring);
+  s.baseColor = mix(s.baseColor, uDisc, m);
+  s.baseColor = mix(s.baseColor, vec3(0.8), m2);
+  s.roughness = mix(s.roughness, 0.2, m);
+  s.emissive += vec3(1.0, 0.15, 0.05) * m2 * (0.6 + 0.4 * sin(uTime * 3.0));
+}` });
+    ctx.add({ name: 'test.hookplate', mesh: T_box(1.2, 1.2, 0.05), material: hookMat, matrix: m4.translation(xs(0) - 0.0, 0.7, zb) });
+
+    // tinted glass over an emissive strip, and overlapping glass panes (sorting test)
+    const strip = new PG.Material({ name: 'emisStrip', baseColor: [0.02, 0.02, 0.02], emissive: [1.0, 0.12, 0.05], emissiveIntensity: 5, roughness: 0.4 });
+    ctx.add({ name: 'test.strip', mesh: T_box(1.3, 0.22, 0.05), material: strip, matrix: m4.translation(xs(1.6), 0.7, zb - 0.1) });
+    const glassT = mats.glass.clone({ name: 'testGlass', alpha: 0.42, baseColor: hex('#0d1c22') });
+    ctx.add({ name: 'test.glass', mesh: T_box(1.5, 1.1, 0.03), material: glassT, matrix: m4.translation(xs(1.6), 0.7, zb + 0.05) });
+    ctx.add({ name: 'test.glass2', mesh: T_box(1.0, 0.9, 0.03), material: mats.glass.clone({ name: 'testGlass2', alpha: 0.35, baseColor: hex('#0a1a12') }), matrix: m4.chain(m4.translation(xs(1.6) + 0.5, 0.6, zb + 0.25), m4.rotationY(-0.35)) });
+    const glow = new PG.Material({ name: 'glow', baseColor: [0, 0, 0], emissive: [0.1, 0.5, 1.0], emissiveIntensity: 1.5, blend: 'add', alpha: 0.35, unlit: true });
+    ctx.add({ name: 'test.glow', mesh: T_box(0.5, 0.5, 0.01), material: glow, matrix: m4.translation(xs(1.6) + 0.55, 0.45, zb + 0.5) });
+
+    // animated part with a child that orbits it
+    const anim = ctx.add({ name: 'test.anim', mesh: sph, material: mats.paintAccent, matrix: m4.translation(xs(3.5), 0.9, zb) });
+    const child = ctx.add({ name: 'test.anim.child', mesh: r.upload(T_sphere(64, 32, 0.14)), material: mats.caliper, parent: anim, matrix: m4.translation(0.75, 0, 0) });
+    ctx.onUpdate((dt, t) => {
+      const y = 0.9 + 0.25 * Math.sin(t * 1.3);
+      m4.multiply(m4.translation(xs(3.5), y, zb), m4.rotationY(t * 0.6), anim.matrix);
+      m4.multiply(m4.rotationY(t * 2.0), m4.translation(0.75, 0, 0), child.matrix);
+    });
+
+    // knurled cylinder + box without uvs (object-space carbon fallback) + brushed disc plate
+    const knurlMat = mats.aluminum.clone({ name: 'testKnurl', pattern: 'knurl', patternScale: 260, roughness: 0.32, baseColor: [0.85, 0.86, 0.87] });
+    ctx.add({ name: 'test.knurl', mesh: T_cyl(96, 0.32, 0.9), material: knurlMat, matrix: m4.translation(xs(5), 0.0, zb) });
+    ctx.add({ name: 'test.carbonbox', mesh: T_box(0.8, 0.8, 0.8, false), material: mats.carbonTwill, matrix: m4.chain(m4.translation(xs(6.4), 0.4, zb), m4.rotationY(0.5)) });
+    ctx.add({ name: 'test.alcbox', mesh: T_box(0.8, 0.5, 0.8), material: mats.alcantara.clone({ baseColor: hex('#8a1538') }), matrix: m4.chain(m4.translation(xs(7.6), 0.25, zb), m4.rotationY(-0.4)) });
+    ctx.add({ name: 'test.leather', mesh: T_box(0.9, 0.16, 0.9), material: mats.leather, matrix: m4.translation(xs(3.5) - 0.2, 0.08, zb + 1.35) });
+    r.settings.occlusionRect = [-6.2, -4.2, 6.2, 5.8];
+  }
+
+  // optional car-sized slab (?slab=1) to judge the floor shadow / AO at car scale (underside 0.10 m above the floor)
+  if (Q.get('slab') === '1') {
+    ctx.add({ name: 'test.slab', mesh: T_box(4.4, 0.5, 1.9), material: mats.paintAccent, matrix: m4.translation(0, 0.35, 3.6) });
+    ctx.add({ name: 'test.slab.tyre', mesh: T_cyl(48, 0.35, 0.3), material: mats.tire, matrix: m4.chain(m4.translation(1.2, 0.35, 3.6 + 0.65 - 0.0), m4.rotationX(Math.PI / 2)) });
+  }
+
+  // heavy synthetic load (?heavy=N): N dense spheres (~65k triangles each; 30 -> ~2 M triangles) on a ring around the origin
+  if (HEAVY) {
+    const dense = r.upload(T_sphere(256, 128, 0.32));
+    const rnd = util.rng(7);
+    const mlist = [mats.paint.clone({ name: 'hv0', baseColor: hex('#1f6fc4') }), mats.carbonTwill, mats.chrome, mats.plasticGloss, mats.aluminum, mats.caliper];
+    for (let i = 0; i < HEAVY; i++) {
+      const ring = i < 12 ? 0 : i < 24 ? 1 : 2, k = ring === 0 ? i : ring === 1 ? i - 12 : i - 24, n = ring === 0 ? 12 : ring === 1 ? 12 : Math.max(1, HEAVY - 24);
+      const rad = 3.6 + ring * 1.6, a = k / n * Math.PI * 2 + ring * 0.3;
+      ctx.add({ name: 'heavy.' + i, mesh: dense, material: mlist[i % mlist.length], matrix: m4.translation(Math.cos(a) * rad * 1.15, 0.32, Math.sin(a) * rad) });
+    }
+    r.settings.occlusionRect = null;
+  }
+
+  // presets for this page
+  const L = { min: 0.3, max: 30 };
+  P.slab = { az: -35, el: 12, dist: 8.5, target: [0, 0.4, 3.6], fov: 30, limits: L };
+  P.testrow = { az: 90, el: 9, dist: 10.6, target: [0, 0.5, -0.9], fov: 30, limits: L };
+  P.testhero = { az: 60, el: 16, dist: 8.4, target: [0.2, 0.5, -0.6], fov: 32, limits: L };
+  P.carbonClose = { az: 90, el: 12, dist: 1.5, target: [xs(1), 0.6, 0], fov: 26, limits: L };
+  P.carbonBox = { az: 55, el: 25, dist: 1.6, target: [xs(6.4), 0.5, -2.3], fov: 26, limits: L };
+  P.paintClose = { az: 70, el: 18, dist: 1.6, target: [xs(0), 0.6, 0], fov: 26, limits: L };
+  P.glass = { az: 80, el: 6, dist: 3.4, target: [xs(1.6), 0.6, -2.3], fov: 30, limits: L };
+  P.hookEdge = { az: 90, el: 0, dist: 1.0, target: [xs(0) + 0.3, 0.7, -2.3], fov: 20, limits: L };
+  P.matsLeft = { az: 90, el: 8, dist: 6.6, target: [-2.4, 0.55, 0], fov: 30, limits: L };
+  P.matsRight = { az: 90, el: 8, dist: 6.6, target: [2.4, 0.55, 0], fov: 30, limits: L };
+  P.brushed = { az: 75, el: 10, dist: 1.5, target: [xs(3), 0.6, 0], fov: 26, limits: L };
+  P.alcClose = { az: 80, el: 14, dist: 1.5, target: [xs(6), 0.6, 0], fov: 26, limits: L };
+  P.knurl = { az: 70, el: 20, dist: 1.4, target: [xs(5), 0.5, -2.3], fov: 26, limits: L };
+  P.heavy = { az: -40, el: 22, dist: 17, target: [0, 0.3, 0], fov: 32, limits: L };
+  if (Q.get('selftest') === '1') PG_APP.ready.then(() => runSelfTests(ctx));
+  ctx.progress('done', 1);
+} });
+</script>
+<script src="../js/car/body.js"></script>
+<script src="../js/car/wheels.js"></script>
+<script src="../js/car/aero.js"></script>
+<script src="../js/car/lights.js"></script>
+<script src="../js/car/details.js"></script>
+<script src="../js/car/interior.js"></script>
+<script src="../js/app.js"></script>
+</body>
+</html>

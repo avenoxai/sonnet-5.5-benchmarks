@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Yürüyen Yaratıklar: yürümeyi evrimle öğrenen yaratıklar</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body class="ui-on">
+
+<!-- Katman 1: kağıt (statik). Katman 2: dünya. Katman 3: kağıt tanesi (statik, yalnız görsel; fare olaylarını geçirir). -->
+<canvas id="paper" aria-hidden="true"></canvas>
+<canvas id="world" role="img" aria-label="Yaratıkların yan yana yürüdüğü dünya"></canvas>
+<canvas id="grain" aria-hidden="true"></canvas>
+
+<div id="hud">
+
+  <!-- Sol üst: künye + nesil sayacı -->
+  <div id="leftCol">
+    <section class="card plate" id="plate" aria-label="Deney özeti">
+      <header>
+        <h1>Yürüyen Yaratıklar</h1>
+        <p class="sub">Yürümeyi evrimle öğrenen bacaklı yaratıklar üzerine bir saha defteri.</p>
+      </header>
+      <div class="gen">
+        <span class="gen-label">Nesil</span>
+        <span id="genNum" class="gen-num" aria-live="off">1</span>
+        <span id="speciesLine" class="gen-where"></span>
+      </div>
+      <div class="ruler" id="genRuler" role="progressbar" aria-label="Nesil ilerlemesi" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <i id="genFill"></i>
+        <span id="genTime" class="num">0,0 / 15 sn</span>
+      </div>
+      <dl class="stats">
+        <div><dt>Yaşayan</dt><dd id="stAlive" class="num">-</dd></div>
+        <div><dt>Hız</dt><dd id="stSpeed" class="num">-</dd></div>
+        <div><dt>En iyi</dt><dd id="stBest" class="num">-</dd></div>
+        <div><dt>Ortalama</dt><dd id="stMean" class="num">-</dd></div>
+        <div><dt>Rekor</dt><dd id="stRecord" class="num">-</dd></div>
+        <div><dt>En iyi (boy)</dt><dd id="stBody" class="num">-</dd></div>
+      </dl>
+    </section>
+  </div>
+
+  <!-- Sağ üst: grafik + canlı sıralama -->
+  <div id="rightCol">
+    <section class="card" id="chartCard" aria-label="Uygunluk grafiği">
+      <header class="card-head">
+        <h2><span class="fig">Şekil 1.</span> Uygunluk eğrisi</h2>
+        <div class="seg" id="chartMode" role="group" aria-label="Grafik ölçüsü">
+          <button type="button" data-m="fit" class="on" title="Motorun kendi uygunluk puanı">Puan</button>
+          <button type="button" data-m="dist" title="Ağırlık merkezinin kat ettiği mesafe (m)">Mesafe</button>
+        </div>
+      </header>
+      <div class="chart-wrap"><canvas id="chart"></canvas></div>
+      <ul class="legend" id="chartLegend">
+        <li><i class="sw best"></i>en iyi</li>
+        <li><i class="sw median"></i>ortanca</li>
+        <li><i class="sw mean"></i>ortalama</li>
+        <li><i class="sw record"></i>rekor</li>
+      </ul>
+      <p class="hint" id="chartHint">Bir nesle tıkla, o neslin şampiyonunu izle.</p>
+    </section>
+
+    <section class="card" id="rankCard" aria-label="Canlı sıralama">
+      <header class="card-head"><h2><span class="fig">Tablo 1.</span> Canlı sıralama</h2></header>
+      <ol id="rankList" class="rank"></ol>
+    </section>
+  </div>
+
+  <!-- Üst orta: bildirimler, giriş notu, kayıt notu -->
+  <div id="centerTop" aria-live="polite">
+    <div id="resumeNote" class="note" hidden>
+      <span id="resumeText">Kaldığın yerden devam ediliyor.</span>
+      <button type="button" class="link" id="resumeReset">Sıfırla</button>
+      <button type="button" class="x" id="resumeClose" aria-label="Kapat">×</button>
+    </div>
+    <section id="intro" class="card note-card" hidden>
+      <p><b>Bu yaratıkların hiçbiri yürümeyi bilmiyor.</b> Her nesilde en uzağa gidenler seçilip çoğalıyor, çocukları onlardan biraz farklı doğuyor.</p>
+      <p>Birkaç dakika izle: sendeleyen kıpırtılar, kendiliğinden bir yürüyüş ritmine dönüşecek.</p>
+      <button type="button" class="btn small" id="introClose">Anladım</button>
+    </section>
+    <div id="toasts"></div>
+  </div>
+
+  <!-- Sol alt: şampiyon galerisi -->
+  <section id="gallery" aria-label="Şampiyon galerisi">
+    <header class="gallery-head">
+      <h2><span class="fig">Levha</span> Şampiyon galerisi</h2>
+      <span class="gallery-sub">her levha, o neslin en iyisinin tekrarı</span>
+      <button type="button" class="x" id="galleryToggle" title="Galeriyi küçült / aç" aria-label="Galeriyi küçült">–</button>
+    </header>
+    <div id="galleryRow"></div>
+  </section>
+
+  <!-- Spot ışığı: seçilen şampiyonun tekrarı -->
+  <section id="spotlight" class="card" hidden aria-label="Şampiyon tekrarı">
+    <header class="card-head">
+      <h2 id="spotTitle">Nesil 1 şampiyonu</h2>
+      <button type="button" class="x" id="spotClose" aria-label="Kapat">×</button>
+    </header>
+    <div class="spot-stage"><canvas id="spotCanvas"></canvas></div>
+    <div class="spot-legend" id="spotLegend"></div>
+    <div class="spot-actions">
+      <label class="check small"><input type="checkbox" id="spotCompare" checked><span>Şimdiki en iyiyle yan yana</span></label>
+      <button type="button" class="btn small" id="spotExport">Genomu indir</button>
+    </div>
+  </section>
+
+  <!-- Alt kontrol çubuğu -->
+  <nav id="controls" aria-label="Kontroller">
+    <button type="button" class="btn icon primary" id="btnPlay" title="Oynat / duraklat (Boşluk)" aria-label="Duraklat">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><g id="icoPause"><path d="M8 5v14M16 5v14" /></g><path id="icoPlay" d="M7 4.5l12 7.5-12 7.5z" style="display:none"/></svg>
+    </button>
+    <div class="speeds" id="speeds" role="group" aria-label="Hız">
+      <button type="button" data-s="1" title="1× (1)">1×</button>
+      <button type="button" data-s="2" title="2× (2)">2×</button>
+      <button type="button" data-s="4" title="4× (3)">4×</button>
+      <button type="button" data-s="8" title="8× (4)">8×</button>
+      <button type="button" data-s="16" title="16× (5)">16×</button>
+      <button type="button" data-s="32" title="32× (6)">32×</button>
+      <button type="button" data-s="64" title="Bütçenin elverdiği en yüksek hız (7)">MAKS</button>
+    </div>
+    <span class="sep"></span>
+    <button type="button" class="btn" id="btnSkip" title="Nesli hemen bitir (N)">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 5l9 7-9 7zM17 5v14"/></svg><span class="lbl lbl-l">Nesli atla</span><span class="lbl lbl-s">Atla</span>
+    </button>
+    <button type="button" class="btn" id="btnRestart" title="Baştan başla (R)">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4.5 12a7.5 7.5 0 1 0 2.4-5.5M4 4v4.5h4.5"/></svg><span class="lbl lbl-l">Baştan başla</span><span class="lbl lbl-s">Baştan</span>
+    </button>
+    <span class="sep"></span>
+    <button type="button" class="btn" id="btnCam" title="Kamera modu (F)">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 8h4l1.5-2h7L17 8h4v11H3zM12 16.5a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6z"/></svg><span class="lbl" id="camLabel">Lider takibi</span>
+    </button>
+    <button type="button" class="btn toggle" id="btnGhost" title="Şampiyon hayaleti (G)" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 20V10a7 7 0 0 1 14 0v10l-2.4-2-2.3 2-2.3-2-2.3 2-2.3-2zM9.5 10.5v1.5M14.5 10.5v1.5"/></svg><span class="lbl">Hayalet</span>
+    </button>
+    <button type="button" class="btn" id="btnSettings" title="Ayarlar (S)" aria-expanded="false" aria-controls="drawer">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4.5v5M6 14.5v5"/></svg><span class="lbl">Ayarlar</span>
+    </button>
+  </nav>
+
+  <!-- Ayarlar çekmecesi -->
+  <aside id="drawer" class="card" aria-label="Ayarlar" hidden>
+    <header class="card-head">
+      <h2>Deney koşulları</h2>
+      <button type="button" class="x" id="drawerClose" aria-label="Kapat">×</button>
+    </header>
+    <div class="drawer-body">
+      <fieldset>
+        <legend>Yaratık türü</legend>
+        <div class="cards" id="speciesCards"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Zemin</legend>
+        <div class="cards two" id="terrainCards"></div>
+      </fieldset>
+      <fieldset>
+        <legend>Nüfus ve süre</legend>
+        <label class="slider"><span class="s-name">Nesildeki yaratık sayısı</span><output id="outPop" class="num">48</output>
+          <input type="range" id="inPop" min="12" max="120" step="2" value="48"></label>
+        <label class="slider"><span class="s-name">Nesil süresi</span><output id="outDur" class="num">15 sn</output>
+          <input type="range" id="inDur" min="6" max="40" step="1" value="15"></label>
+        <label class="slider"><span class="s-name">Mutasyon şiddeti</span><output id="outMut" class="num">1,0×</output>
+          <input type="range" id="inMut" min="0.25" max="3" step="0.05" value="1"></label>
+        <p class="fine">Sayı ve süre bir sonraki nesilde, mutasyon hemen geçerli olur.</p>
+        <label class="check"><input type="checkbox" id="inBody"><span>Vücudu da evrimleştir <em>(bacak boyları, gövde ölçüleri)</em></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Tohum</legend>
+        <div class="seedrow">
+          <input type="number" id="inSeed" min="1" step="1" value="1" class="num" aria-label="Tohum">
+          <button type="button" class="btn small" id="seedApply">Bu tohumla başlat</button>
+          <button type="button" class="btn small" id="seedRandom">Rastgele</button>
+        </div>
+        <p class="fine">Aynı tohum, aynı başlangıç nüfusu demek: deney tekrarlanabilir.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Görünüm</legend>
+        <div class="seg wide" id="camSeg" role="group" aria-label="Kamera">
+          <button type="button" data-cam="leader">Lider takibi</button>
+          <button type="button" data-cam="pack">Tüm sürü</button>
+          <button type="button" data-cam="free">Serbest</button>
+        </div>
+        <label class="check"><input type="checkbox" id="inGhost"><span>Şampiyon hayaleti <em>(tüm zamanların en iyisi, saydam)</em></span></label>
+        <label class="check"><input type="checkbox" id="inUi" checked><span>Panelleri göster <em>(H)</em></span></label>
+      </fieldset>
+      <fieldset>
+        <legend>Kayıt</legend>
+        <p class="fine" id="saveInfo">Her nesilden sonra bu tarayıcıya kaydedilir.</p>
+        <div class="btnrow">
+          <button type="button" class="btn small" id="btnExport">Şampiyonu dışa aktar</button>
+          <button type="button" class="btn small" id="btnImport">İçe aktar</button>
+          <button type="button" class="btn small danger" id="btnWipe">Kaydı sıfırla</button>
+        </div>
+        <input type="file" id="fileImport" accept="application/json,.json" hidden>
+      </fieldset>
+      <fieldset>
+        <legend>Klavye</legend>
+        <dl class="keys">
+          <div><dt>Boşluk</dt><dd>duraklat / oynat</dd></div>
+          <div><dt>1 – 7</dt><dd>hız (1× ... MAKS)</dd></div>
+          <div><dt>F</dt><dd>kamera modu</dd></div>
+          <div><dt>N</dt><dd>nesli atla</dd></div>
+          <div><dt>R</dt><dd>baştan başla</dd></div>
+          <div><dt>G</dt><dd>şampiyon hayaleti</dd></div>
+          <div><dt>+ / −</dt><dd>yakınlaş / uzaklaş</dd></div>
+          <div><dt>H</dt><dd>panelleri gizle</dd></div>
+          <div><dt>S</dt><dd>ayarlar</dd></div>
+        </dl>
+      </fieldset>
+    </div>
+  </aside>
+
+  <!-- Onay penceresi -->
+  <div id="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="card modal-card">
+      <h2 id="modalTitle">Emin misin?</h2>
+      <p id="modalText"></p>
+      <div class="btnrow end">
+        <button type="button" class="btn" id="modalCancel">Vazgeç</button>
+        <button type="button" class="btn primary" id="modalOk">Tamam</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="notice" hidden role="status"></div>
+
+  <div id="ffOverlay" hidden>
+    <div class="card ff-card">
+      <h2>Hızlı ileri sarma</h2>
+      <p id="ffText" class="num">0 / 0 nesil</p>
+      <div class="ruler"><i id="ffFill"></i></div>
+      <button type="button" class="btn small" id="ffSkip">Şimdi izle</button>
+    </div>
+  </div>
+</div>
+
+<!-- Paneller gizliyken geri dönüş ipucu -->
+<button type="button" id="uiHint" hidden title="Panelleri geri getir (H)">H: panelleri göster</button>
+
+<!-- Motor yüklenemezse -->
+<div id="fatal" hidden>
+  <div class="card fatal-card">
+    <h2>Evrim motoru başlatılamadı</h2>
+    <p id="fatalText">js/core.js yüklenemedi ya da beklenen arayüzü sunmuyor.</p>
+    <p class="fine">Sayfayı yenilemeyi dene. Sorun sürerse js/core.js dosyasının yerinde olduğundan emin ol.</p>
+  </div>
+</div>
+
+<script src="js/core.js"></script>
+<script src="js/render.js"></script>
+<script src="js/charts.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

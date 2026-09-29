@@ -1,0 +1,31 @@
+/* hud.css — minimal mission-control style overlay */
+#hud-root{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;color:#eee}
+.hud-bar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);width:min(980px,94vw);padding:10px 14px;border-radius:14px;
+  background:rgba(12,10,9,.62);backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.10);display:flex;flex-direction:column;gap:8px;
+  transition:opacity .4s;z-index:20}
+.hud-bar.hide{opacity:0;pointer-events:none}
+.hud-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.hud-btn{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#f3e7de;border-radius:8px;padding:5px 11px;font-size:13px;cursor:pointer}
+.hud-btn:hover{background:rgba(255,122,69,.28)} .hud-btn.on{background:rgba(255,122,69,.55);border-color:#ff7a45}
+.hud-time{font-variant-numeric:tabular-nums;font-size:13px;color:#c9b8ab;min-width:170px}
+.hud-scrub{flex:1;min-width:200px;accent-color:#ff7a45}
+.hud-tele{position:fixed;left:16px;top:16px;padding:10px 14px;border-radius:10px;background:rgba(8,12,18,.55);border:1px solid rgba(159,208,255,.25);
+  font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;color:#cfe6ff;backdrop-filter:blur(8px);z-index:15;min-width:210px}
+.hud-tele b{color:#9fd0ff;font-weight:600} .hud-tele .ph{color:#ffb38f;margin-bottom:4px;font-family:-apple-system,Helvetica,Arial,sans-serif;font-size:13px}
+.hud-toast{position:fixed;left:50%;top:14%;transform:translateX(-50%);font-size:clamp(18px,2.6vw,34px);letter-spacing:.18em;font-weight:300;color:#fff;
+  text-shadow:0 0 18px rgba(0,0,0,.8);opacity:0;transition:opacity .5s;pointer-events:none;z-index:14;text-align:center}
+.hud-label{position:fixed;color:#fff;font-weight:400;pointer-events:none;white-space:nowrap;z-index:12;transform:translate(-50%,-100%)}
+.hud-title{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;color:#fff;font-weight:700;line-height:1.35;pointer-events:none;z-index:13;
+  text-shadow:0 0 12px rgba(0,0,0,.75),0 0 3px rgba(0,0,0,.9)}
+.hud-icons{position:fixed;pointer-events:none;z-index:11}
+.hud-icon{position:absolute;transform:translate(-50%,-50%);font-size:11px;color:#ffd7c2;text-align:center;line-height:1.15;padding:4px 7px;border-radius:8px;background:rgba(0,0,0,.55);border:1px solid rgba(255,140,90,.45);white-space:nowrap}
+.hud-start{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;background:radial-gradient(120% 90% at 50% 110%,rgba(90,42,24,.78),rgba(5,4,3,.9));transition:opacity .8s}
+.hud-start.gone{opacity:0;pointer-events:none}
+.hud-start .in{text-align:center;max-width:640px;padding:0 20px}
+.hud-start h1{font-weight:200;letter-spacing:.3em;text-indent:.3em;font-size:clamp(30px,6vw,56px);margin:0 0 10px;color:#f5e7dc}
+.hud-start p{color:#c9b3a3;font-size:15px;margin:6px 0} .hud-start .hint{font-size:12px;color:#8e796b;margin-top:22px;line-height:1.7}
+.hud-start button{margin-top:26px;font-size:18px;letter-spacing:.2em;padding:12px 38px;border-radius:30px;border:1px solid #ff7a45;background:rgba(255,122,69,.18);color:#fff;cursor:pointer}
+.hud-start button:hover{background:rgba(255,122,69,.5)}
+.hud-end{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);text-align:center}
+.hud-end.on{display:flex} .hud-end h2{font-weight:200;letter-spacing:.2em;font-size:clamp(24px,4vw,44px);margin:0 0 12px}
+.hud-end p{color:#d8c6b8;margin:4px 0}

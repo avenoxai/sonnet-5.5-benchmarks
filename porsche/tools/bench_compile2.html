@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>compile bench 2</title>
+<script src="../js/core.js"></script><script src="../js/sdf.js"></script>
+<script>
+(async () => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const gl = c.getContext('webgl2'); gl.getExtension('EXT_color_buffer_float');
+  const se = (n, a, b, e, cy) => Array.from({ length: n }, (_, k) => { const th = k / n * Math.PI * 2, s = Math.sin(th), c = Math.cos(th); return [cy + a * Math.sign(s) * Math.pow(Math.abs(s), 2 / e), b * Math.sign(c) * Math.pow(Math.abs(c), 2 / e)]; });
+  const N = +(new URLSearchParams(location.search).get('n') || 84);
+  const stations = [-1, -0.2, 0.7].map((x, i) => ({ x, pts: se(N, 0.1 + i * 0.1, 0.2 + i * 0.1, 2.5, 0.3) }));
+  const loft = PG.sdf.loftGLSL('hull', stations, {});
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 16, 16);
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const one = new Float32Array(4);
+  const out = [];
+  for (const sites of [1, 4, 13]) {
+    let body = '';
+    for (let i = 0; i < sites; i++) body += `s += hull(p + vec3(float(${i}) * 0.001, 0., 0.) * uK);\n`;
+    const fs = `#version 300 es\nprecision highp float; ${PG.sdf.lib}\n${loft}\nuniform float uK; out vec4 o; // ${Math.random()}\nvoid main(){ vec3 p = vec3(gl_FragCoord.xy * 0.05 - 0.4, 0.1); float s = 0.; ${body} o = vec4(s); }`;
+    const t0 = performance.now();
+    const pr = PG.glu.program(gl, PG.glu.FULLSCREEN_VS, fs, 'b' + sites);
+    gl.useProgram(pr); gl.viewport(0, 0, 16, 16); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, one);
+    out.push(`${sites} sites: ${(performance.now() - t0).toFixed(0)}ms`);
+  }
+  console.log(`N=${N} loft cold compile+first draw: ` + out.join(' | ')); window.__ready = true;
+})().catch(e => { console.error('ERR ' + e); window.__ready = true; });
+</script>

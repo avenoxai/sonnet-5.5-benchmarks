@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Sonnet 5.5 test gecesi</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-kind="acilis">
+<div class="paper" aria-hidden="true"></div>
+
+<main id="deck" aria-live="polite"></main>
+
+<nav class="bar" aria-label="Slayt gezinme">
+  <div class="bar__l"><img class="bar__mark" src="assets/avenox-wordmark-paper.svg" alt="avenox"><span id="bar-title"></span></div>
+  <div class="bar__ticks" id="ticks"></div>
+  <div class="bar__r">
+    <button class="bar__btn" id="btn-sound" type="button" aria-pressed="false" title="Ses (M)"></button>
+    <button class="bar__btn" id="btn-index" type="button" title="Slayt dizini (I)">Dizin <kbd>I</kbd></button>
+    <span class="bar__count" id="count"></span>
+  </div>
+</nav>
+
+<section class="index" id="index" aria-label="Slayt dizini" aria-hidden="true">
+  <div class="index__in">
+    <div class="index__head">
+      <h2>Bu gece</h2>
+      <div class="index__keys">
+        <span><kbd>←</kbd><kbd>→</kbd> gezin</span>
+        <span><kbd>1</kbd><kbd>2</kbd> tam ekran</span>
+        <span><kbd>↑</kbd><kbd>↓</kbd> sekme</span>
+        <span><kbd>M</kbd> ses</span>
+        <span><kbd>Esc</kbd> kapat</span>
+      </div>
+    </div>
+    <div class="index__grid" id="index-grid"></div>
+  </div>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

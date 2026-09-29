@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>probe</title>
+<script>
+(async () => {
+  const out = {};
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const gl = c.getContext('webgl2', { antialias: false });
+  out.webgl2 = !!gl;
+  if (!gl) { window.__probe = out; window.__ready = true; return; }
+  const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+  out.renderer = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : 'n/a';
+  out.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE); out.max3D = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE);
+  out.maxSamples = gl.getParameter(gl.MAX_SAMPLES); out.maxDrawBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
+  out.maxFragUniformVectors = gl.getParameter(gl.MAX_FRAGMENT_UNIFORM_VECTORS);
+  out.exts = {};
+  for (const n of ['EXT_color_buffer_float','EXT_color_buffer_half_float','OES_texture_float_linear','OES_texture_half_float_linear','EXT_texture_filter_anisotropic','KHR_parallel_shader_compile','EXT_float_blend','WEBGL_multi_draw','EXT_disjoint_timer_query_webgl2'])
+    out.exts[n] = !!gl.getExtension(n);
+  // R32F 3D texture layer render + readback test
+  try {
+    const W = 64, H = 32, D = 8;
+    const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_3D, tex);
+    gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32F, W, H, D);
+    const fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, tex, 0, 3);
+    out.fboStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    out.readFormat = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT) + '/' + gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE) + ' (RED=' + gl.RED + ' RGBA=' + gl.RGBA + ' FLOAT=' + gl.FLOAT + ')';
+    gl.clearBufferfv(gl.COLOR, 0, [0.5, 0, 0, 0]);
+    const buf = new Float32Array(W * H);
+    gl.readPixels(0, 0, W, H, gl.RED, gl.FLOAT, buf);
+    out.readRedFloat = buf[0] + ',' + buf[W * H - 1] + ' err=' + gl.getError();
+  } catch (e) { out.r32fTest = 'ERR ' + e; }
+  // timing of a heavy SDF-like loop
+  window.__probe = out; window.__ready = true; document.title = 'probe done';
+  console.log(JSON.stringify(out, null, 1));
+})();
+</script>

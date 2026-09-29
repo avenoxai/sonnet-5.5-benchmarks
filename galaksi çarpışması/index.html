@@ -1,0 +1,1502 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>Samanyolu × Andromeda — Galaksi Çarpışması</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="description" content="Samanyolu ile Andromeda galaksilerinin birleşmesinin gerçek zamanlı, GPU üzerinde çalışan simülasyonu.">
+<style>
+  :root {
+    --ink: #e9edf6;
+    --dim: rgba(233, 237, 246, .56);
+    --faint: rgba(233, 237, 246, .32);
+    --glass: rgba(9, 11, 19, .52);
+    --line: rgba(255, 255, 255, .10);
+    --amber: #ffb96b;
+    --blue: #8dbcff;
+    --accent: #ffd9a3;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; color: var(--ink);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Helvetica Neue", Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+  canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  canvas#gl.drag { cursor: grabbing; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
+
+  /* -------- başlık -------- */
+  #title { position: fixed; left: 28px; top: 24px; pointer-events: none; text-shadow: 0 1px 12px rgba(0,0,0,.8); }
+  #title h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; color: var(--ink); }
+  #title h1 b { color: var(--amber); font-weight: 600; }
+  #title h1 i { color: var(--blue); font-style: normal; }
+  #title p { margin: 7px 0 0; font-size: 12px; letter-spacing: .04em; color: var(--dim); }
+
+  /* -------- istatistikler -------- */
+  #stats { position: fixed; right: 28px; top: 24px; width: 236px; padding: 14px 16px 12px;
+    background: var(--glass); border: 1px solid var(--line); border-radius: 14px;
+    backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); }
+  #stats .row { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; }
+  #stats .row + .row { border-top: 1px solid rgba(255,255,255,.05); }
+  #stats .k { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); }
+  #stats .v { font-size: 14px; color: var(--ink); text-align: right; }
+  #stats .v small { display: block; font-size: 10.5px; color: var(--dim); margin-top: 1px; }
+
+  /* -------- açıklama başlığı -------- */
+  #caption { position: fixed; left: 50%; bottom: 142px; transform: translateX(-50%); width: min(640px, calc(100vw - 48px));
+    text-align: center; pointer-events: none; text-shadow: 0 1px 18px rgba(0,0,0,.9); transition: opacity .8s ease; }
+  #caption .phase { font-size: 11px; letter-spacing: .34em; text-transform: uppercase; color: var(--accent); }
+  #caption .ttl { margin: 8px 0 6px; font-size: 26px; font-weight: 300; letter-spacing: .01em; }
+  #caption .txt { font-size: 13.5px; line-height: 1.55; color: rgba(233,237,246,.78); }
+  #caption.fade { opacity: 0; }
+
+  /* -------- alt panel -------- */
+  #dock { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); width: min(1080px, calc(100vw - 32px));
+    display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center;
+    padding: 12px 16px; background: var(--glass); border: 1px solid var(--line); border-radius: 18px;
+    backdrop-filter: blur(18px) saturate(1.25); -webkit-backdrop-filter: blur(18px) saturate(1.25); }
+  #dock .btns { display: flex; gap: 6px; align-items: center; }
+  button { font: inherit; color: var(--ink); background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.09);
+    border-radius: 10px; padding: 0; cursor: pointer; transition: background .15s, border-color .15s, transform .1s; }
+  button:hover { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.2); }
+  button:active { transform: scale(.96); }
+  button:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  #btnPlay { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,185,107,.16); border-color: rgba(255,185,107,.4); }
+  #btnPlay:hover { background: rgba(255,185,107,.28); }
+  #btnRestart { width: 34px; height: 34px; display: grid; place-items: center; }
+  svg { display: block; }
+  #tlWrap { position: relative; height: 54px; min-width: 0; }
+  #tl { position: absolute; inset: 0; width: 100%; height: 100%; cursor: ew-resize; touch-action: none; }
+  #tlTip { position: absolute; top: -26px; transform: translateX(-50%); padding: 3px 8px; font-size: 11px; white-space: nowrap;
+    background: rgba(0,0,0,.7); border: 1px solid var(--line); border-radius: 6px; pointer-events: none; opacity: 0; transition: opacity .12s; }
+  #time { text-align: right; min-width: 148px; }
+  #time .big { font-size: 22px; font-weight: 300; letter-spacing: .01em; line-height: 1.1; }
+  #time .big em { font-style: normal; color: var(--amber); }
+  #time .sub { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--faint); margin-top: 3px; }
+
+  /* -------- kamera / seçenekler -------- */
+  #tools { position: fixed; left: 28px; bottom: 22px; display: none; }
+  #camBar { position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%); display: none; }
+  .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--glass); border: 1px solid var(--line); border-radius: 12px;
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+  .seg button { border: 0; background: transparent; padding: 7px 12px; font-size: 12px; color: var(--dim); border-radius: 9px; white-space: nowrap; }
+  .seg button:hover { background: rgba(255,255,255,.08); color: var(--ink); }
+  .seg button.on { background: rgba(255,255,255,.14); color: var(--ink); box-shadow: inset 0 0 0 1px rgba(255,255,255,.16); }
+  #side { position: fixed; left: 28px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 12px; }
+  #side .seg { flex-direction: column; }
+  #side .seg button { text-align: left; padding: 8px 14px 8px 12px; display: flex; gap: 9px; align-items: center; }
+  #side .seg button kbd { margin-left: auto; padding-left: 10px; font: 10px ui-monospace, Menlo, monospace; color: var(--faint); }
+  #side h6 { margin: 0 0 -4px 6px; font-size: 9.5px; letter-spacing: .24em; font-weight: 500; text-transform: uppercase; color: var(--faint); }
+  #skyOpts { display: none; }
+  .tg { display: flex; align-items: center; gap: 9px; padding: 7px 12px; font-size: 12px; color: var(--dim); }
+  .tg .sw { width: 26px; height: 15px; border-radius: 9px; background: rgba(255,255,255,.14); position: relative; transition: background .15s; flex: none; }
+  .tg .sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: #cfd5e4; transition: transform .15s, background .15s; }
+  button.tg.on { color: var(--ink); }
+  button.tg.on .sw { background: rgba(255,185,107,.55); }
+  button.tg.on .sw::after { transform: translateX(11px); background: #fff; }
+  #speedSeg button { padding: 7px 10px; min-width: 38px; }
+
+  #btnInfo { position: fixed; right: 28px; top: 210px; width: 30px; height: 30px; border-radius: 50%; font-size: 14px; font-family: Georgia, serif; font-style: italic; display: none; }
+
+  /* -------- etiketler -------- */
+  #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+  .lbl { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    text-shadow: 0 0 8px rgba(0,0,0,1), 0 0 3px rgba(0,0,0,1), 0 1px 14px rgba(0,0,0,.9); will-change: transform; opacity: 0; transition: opacity .25s; }
+  .lbl.show { opacity: 1; }
+  .lbl .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 8px; vertical-align: 1px; box-shadow: 0 0 10px currentColor; background: currentColor; }
+  .lbl.mw { color: var(--amber); } .lbl.m31 { color: var(--blue); } .lbl.rem { color: #ffe9c9; letter-spacing: .3em; font-size: 13px; }
+  .lbl small { display: block; margin: 3px 0 0 15px; font-size: 10px; letter-spacing: .08em; text-transform: none; color: var(--dim); }
+  .lbl.sun { color: #ffe27a; }
+  .lbl.sun .ring { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid rgba(255,226,122,.9);
+    box-shadow: 0 0 14px rgba(255,214,90,.7), inset 0 0 8px rgba(255,214,90,.4); animation: pulse 2.4s ease-out infinite; }
+  .lbl.sun span.t { position: absolute; left: 18px; top: 4px; }
+  .lbl.sky { color: rgba(255,255,255,.85); }
+  @keyframes pulse { 0% { transform: scale(.6); opacity: 1 } 70% { transform: scale(1.5); opacity: .15 } 100% { transform: scale(.6); opacity: 0 } }
+
+  /* -------- bilgi paneli -------- */
+  #info { position: fixed; right: 28px; top: 252px; width: 330px; max-height: calc(100vh - 420px); overflow: auto; padding: 16px 18px; font-size: 12.5px; line-height: 1.6;
+    color: rgba(233,237,246,.82); background: rgba(9,11,19,.78); border: 1px solid var(--line); border-radius: 14px;
+    backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); display: none; user-select: text; -webkit-user-select: text; }
+  #info.open { display: block; }
+  #info h3 { margin: 0 0 8px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+  #info p { margin: 0 0 9px; }
+  #info b { color: #fff; font-weight: 600; }
+  #info .keys { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin-top: 4px; }
+  #info kbd { font: 11px ui-monospace, Menlo, monospace; padding: 1px 6px; border-radius: 5px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.14); }
+
+  /* -------- açılış -------- */
+  #boot { position: fixed; inset: 0; background: #000; display: grid; place-items: center; z-index: 50; transition: opacity 1.2s ease; text-align: center; }
+  #boot.gone { opacity: 0; pointer-events: none; }
+  #boot h2 { margin: 0; font-size: 15px; font-weight: 300; letter-spacing: .5em; text-transform: uppercase; }
+  #boot h2 b { color: var(--amber); font-weight: 400; } #boot h2 i { color: var(--blue); font-style: normal; }
+  #boot p { margin: 16px 0 0; font-size: 12px; letter-spacing: .1em; color: var(--dim); }
+  #boot .bar { margin: 22px auto 0; width: 180px; height: 2px; background: rgba(255,255,255,.1); overflow: hidden; border-radius: 2px; }
+  #boot .bar i { display: block; height: 100%; width: 30%; background: linear-gradient(90deg, var(--amber), var(--blue)); animation: slide 1.3s ease-in-out infinite; }
+  @keyframes slide { 0% { transform: translateX(-100%) } 100% { transform: translateX(340%) } }
+  #err { display: none; max-width: 520px; padding: 0 24px; }
+
+  #dbg { position: fixed; left: 8px; top: 8px; font: 11px ui-monospace, Menlo, monospace; color: #9f9; background: rgba(0,0,0,.6); padding: 4px 8px; white-space: pre; display: none; z-index: 20; }
+  #seeking { position: fixed; left: 50%; top: 50px; transform: translateX(-50%); font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--accent);
+    opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #seeking.on { opacity: 1; }
+
+  body.hideui #title, body.hideui #stats, body.hideui #dock, body.hideui #side, body.hideui #camBar, body.hideui #btnInfo, body.hideui #info, body.hideui #caption, body.hideui #hint { opacity: 0; pointer-events: none; }
+  #title, #stats, #dock, #side, #camBar, #btnInfo { transition: opacity .35s; }
+
+  #hint { position: fixed; left: 50%; top: 26px; transform: translateX(-50%); font-size: 11.5px; letter-spacing: .06em; color: var(--dim); pointer-events: none;
+    white-space: nowrap; transition: opacity 1.2s ease; text-shadow: 0 1px 10px #000; }
+  #hint.gone { opacity: 0; }
+  @media (max-width: 900px) {
+    #stats, #side, #hint { display: none; }
+    #camBar { display: block; top: 74px; bottom: auto; }
+    #title { left: 16px; top: 16px; } #title h1 { font-size: 11px; letter-spacing: .26em; } #title p { font-size: 11px; }
+    #btnInfo { top: 16px; right: 16px; }
+    #info { left: 12px; right: 12px; width: auto; top: 60px; max-height: 58vh; }
+    #dock { grid-template-columns: auto 1fr; gap: 6px 10px; padding: 10px 12px; bottom: 10px; width: calc(100vw - 20px); border-radius: 16px; }
+    #btnPlay { width: 40px; height: 40px; } #btnRestart { width: 30px; height: 30px; }
+    #tlWrap { height: 46px; }
+    #time { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; text-align: left; min-width: 0; }
+    #time .big { font-size: 17px; white-space: nowrap; } #time .sub { display: none; }
+    #time .seg { margin-top: 0 !important; }
+    #speedSeg button { padding: 5px 7px; min-width: 28px; font-size: 11px; }
+    #caption { bottom: 168px; } #caption .ttl { font-size: 20px; margin: 6px 0 4px; } #caption .txt { font-size: 12px; line-height: 1.45; }
+    .lbl { font-size: 10px; } .lbl small { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="labels"></div>
+
+<div id="title">
+  <h1><b>Samanyolu</b> × <i>Andromeda</i></h1>
+  <p>Galaksi çarpışması · gerçek zamanlı simülasyon</p>
+</div>
+
+<div id="stats">
+  <div class="row"><span class="k">Ayrılık</span><span class="v mono" id="sSep">—<small>—</small></span></div>
+  <div class="row"><span class="k">Bağıl hız</span><span class="v mono" id="sVel">—</span></div>
+  <div class="row"><span class="k">Güneş → merkez</span><span class="v mono" id="sSun">—<small>—</small></span></div>
+  <div class="row"><span class="k">Güneş → Andromeda</span><span class="v mono" id="sSunM">—<small>—</small></span></div>
+</div>
+<button id="btnInfo" title="Bu simülasyon nasıl çalışıyor?" aria-label="Bilgi">i</button>
+<div id="info">
+  <h3>Bu simülasyon nasıl çalışıyor?</h3>
+  <p><b>Gerçek başlangıç koşulları.</b> Andromeda 780 kpc (≈2,5 milyon ışık yılı) uzaklıkta, Güneş'e göre saniyede ~110 km ile yaklaşıyor ve gökyüzünde (l = 121°, b = −22°) yönünde duruyor. Güneş, Samanyolu'nun merkezinden 8,2 kpc uzakta ve ~220 km/s ile dönüyor.</p>
+  <p><b>Fizik.</b> Her galaksi yıldız çıkıntısı, disk ve karanlık madde halesinden oluşuyor. İki galaksinin merkezleri birbirini çekimle çeker, <b>dinamik sürtünme</b> ile yörünge enerjisini kaybeder ve sonunda birleşir. Yaklaşık <b id="infoN">310 bin</b> yıldız parçacığı bu iki potansiyelde, GPU üzerinde her karede birkaç yüz adımla ilerletilir; gel-git kuyrukları ve köprüler bu çekimden kendiliğinden doğar.</p>
+  <p><b>Sınırlar.</b> Bu, tam bir N-cisim hesabı değil, “kısıtlı” bir modeldir: yıldızlar birbirini çekmez, spiral kollar kayan bir örüntüyle çizilir, gaz fiziği yoktur. Zamanlamalar (ilk geçiş ≈ 4 milyar yıl, birleşme ≈ 7 milyar yıl) gerçek tahminlerle aynı mertebededir, ayrıntılar ise yalnızca örnektir.</p>
+  <p><b>Bir not.</b> Güneş yaklaşık 5 milyar yıl sonra kızıl dev olacak; yani çarpışmayı Dünya'dan izlemek pek mümkün değil. Yine de “Dünya'dan gökyüzü” modu bu manzarayı gösterir.</p>
+  <div class="keys mono">
+    <kbd>Boşluk</kbd><span>Oynat / duraklat</span>
+    <kbd>← →</kbd><span>±100 milyon yıl (Shift: ±500)</span>
+    <kbd>1 – 5</kbd><span>Kamera modları</span>
+    <kbd>[ ]</kbd><span>Hız</span>
+    <kbd>R</kbd><span>Başa sar</span>
+    <kbd>L · T · D</kbd><span>Etiket · Güneş izi · Toz</span>
+    <kbd>H</kbd><span>Arayüzü gizle</span>
+    <kbd>Çift tık</kbd><span>Kamerayı sıfırla</span>
+  </div>
+</div>
+
+<div id="side">
+  <h6>Kamera</h6>
+  <div class="seg" id="camSeg">
+    <button data-cam="cinema" class="on">Sinematik <kbd>1</kbd></button>
+    <button data-cam="free">Serbest <kbd>2</kbd></button>
+    <button data-cam="mw">Samanyolu <kbd>3</kbd></button>
+    <button data-cam="m31">Andromeda <kbd>4</kbd></button>
+    <button data-cam="sky">Dünya'dan gökyüzü <kbd>5</kbd></button>
+  </div>
+  <div class="seg" id="skyOpts">
+    <button data-look="m31" class="on">Andromeda'ya bak</button>
+    <button data-look="gc">Galaktik merkeze bak</button>
+    <button data-look="free">Serbest bak</button>
+  </div>
+  <h6>Görünüm</h6>
+  <div class="seg" style="flex-direction:column">
+    <button class="tg on" id="tgLabels"><span class="sw"></span>Etiketler</button>
+    <button class="tg on" id="tgTrail"><span class="sw"></span>Güneş'in izi</button>
+    <button class="tg on" id="tgDust"><span class="sw"></span>Toz şeritleri</button>
+    <button class="tg on" id="tgOrbit"><span class="sw"></span>Yavaş dönüş</button>
+  </div>
+</div>
+
+<div id="camBar"><div class="seg" id="camSegM">
+  <button data-cam="cinema" class="on">Sinematik</button><button data-cam="mw">Samanyolu</button><button data-cam="m31">Andromeda</button><button data-cam="sky">Gökyüzü</button>
+</div></div>
+
+<div id="hint">Sürükleyerek döndürün · Tekerlekle yakınlaşın · Zaman çizelgesinden ileri‑geri sarın</div>
+<div id="caption"><div class="phase mono" id="cPhase"></div><div class="ttl" id="cTitle"></div><div class="txt" id="cText"></div></div>
+<div id="seeking">Hesaplanıyor…</div>
+
+<div id="dock">
+  <div class="btns">
+    <button id="btnPlay" aria-label="Oynat / duraklat"></button>
+    <button id="btnRestart" title="Başa sar (R)" aria-label="Başa sar">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a5 5 0 1 0 1.6-3.7"/><path d="M3 2.5v3h3"/></svg>
+    </button>
+  </div>
+  <div id="tlWrap"><canvas id="tl"></canvas><div id="tlTip" class="mono"></div></div>
+  <div id="time">
+    <div class="big mono" id="tBig">+0,00 <em>milyar yıl</em></div>
+    <div class="sub">bugünden itibaren</div>
+    <div class="seg" id="speedSeg" style="margin-top:6px;display:inline-flex">
+      <button data-sp="0.25">¼×</button><button data-sp="0.5">½×</button><button data-sp="1" class="on">1×</button><button data-sp="2">2×</button><button data-sp="4">4×</button>
+    </div>
+  </div>
+</div>
+
+<div id="boot"><div>
+  <h2><b>Samanyolu</b> × <i>Andromeda</i></h2>
+  <p id="bootMsg">Galaksiler kuruluyor…</p>
+  <div class="bar"><i></i></div>
+  <p id="err"></p>
+</div></div>
+<pre id="dbg"></pre>
+
+<script src="physics.js"></script>
+<script>
+/* ==========================================================================
+ *  Samanyolu × Andromeda — WebGL2 simülasyonu
+ *  - Yıldız entegrasyonu GPU'da (transform feedback), merkez dinamiği CPU'da (çift duyarlık)
+ *  - HDR sahne → bloom → filmik ton eşleme
+ * ========================================================================== */
+(function () {
+'use strict';
+const P = window.Physics;
+const $ = (id) => document.getElementById(id);
+const qs = new URLSearchParams(location.search);
+(function applyOverrides() {          // yalnızca deney/ayar için URL parametreleri
+  const num = (k, d) => (qs.has(k) ? parseFloat(qs.get(k)) : d);
+  P.SC.vt = num('vt', P.SC.vt); P.SC.dfK = num('dfk', P.SC.dfK);
+  P.SC.dfB = num('dfb', P.SC.dfB);
+  const o = {};
+  [['tpsi', 'tPsi'], ['psi', 'psi'], ['inc', 'inc'], ['spin', 'spin']].forEach(([k, n]) => { if (qs.has(k)) o[n] = parseFloat(qs.get(k)); });
+  if (Object.keys(o).length) P.setupOrientation(o);
+})();
+const KPC_LY = 3261.56;
+const TMAX = 10500;            // Myr
+const SNAP_EVERY = 500;        // Myr
+
+function fmt(x, d) { return x.toFixed(d).replace('.', ','); }
+function clamp(x, a, b) { return Math.min(b, Math.max(a, x)); }
+function smooth(a, b, x) { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); }
+function mix(a, b, t) { return a + (b - a) * t; }
+
+/* ---------------------------------------------------------------- GL kurulumu */
+const canvas = $('gl');
+const gl = canvas.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance', preserveDrawingBuffer: false });
+function fail(msg) {
+  $('bootMsg').textContent = '';
+  const e = $('err'); e.style.display = 'block'; e.textContent = msg;
+  document.querySelector('#boot .bar').style.display = 'none';
+}
+if (!gl) { fail('Bu tarayıcı WebGL2 desteklemiyor. Lütfen güncel bir Chrome, Safari veya Firefox ile açın.'); return; }
+const extCBF = gl.getExtension('EXT_color_buffer_float');
+gl.getExtension('EXT_color_buffer_half_float');
+gl.getExtension('OES_texture_float_linear');
+if (!extCBF) { fail('Bu cihaz kayan noktalı render hedeflerini desteklemiyor.'); return; }
+
+function compile(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    const log = gl.getShaderInfoLog(s);
+    console.error(log, '\n' + src.split('\n').map((l, i) => (i + 1) + ': ' + l).join('\n'));
+    throw new Error('Shader derlenemedi: ' + log);
+  }
+  return s;
+}
+function program(vs, fs, tfVars) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  if (tfVars) gl.transformFeedbackVaryings(p, tfVars, gl.INTERLEAVED_ATTRIBS);
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Program bağlanamadı: ' + gl.getProgramInfoLog(p));
+  const cache = {};
+  p.u = (n) => (n in cache ? cache[n] : (cache[n] = gl.getUniformLocation(p, n)));
+  return p;
+}
+
+/* ------------------------------------------------------------- GLSL: çekim alanı */
+const GLSL_GRAV = `
+uniform vec4 uP0[2];   // GM_bulge, a_bulge, GM_disk, a_disk
+uniform vec4 uP1[2];   // b_disk, GM_halo, a_halo, -
+uniform vec3 uNrm[2];  // disk dönme ekseni
+vec3 galAccel(int i, vec3 x) {
+  float r = sqrt(dot(x, x)) + 1e-5;
+  vec4 p0 = uP0[i]; vec4 p1 = uP1[i];
+  float ab = r + p0.y, ah = r + p1.z;
+  float c = -(p0.x / (r * ab * ab) + p1.y / (r * ah * ah));
+  vec3 a = c * x;
+  vec3 n = uNrm[i];
+  float zc = dot(x, n);
+  vec3 xp = x - n * zc;
+  float B = sqrt(zc * zc + p1.x * p1.x);
+  float s = p0.w + B;
+  float D = dot(xp, xp) + s * s;
+  a += (-p0.z / (D * sqrt(D))) * (xp + n * (zc * s / B));
+  return a;
+}
+`;
+
+const VS_UPDATE = `#version 300 es
+precision highp float;
+precision highp int;
+layout(location=0) in vec4 aPos;
+layout(location=1) in vec4 aVel;
+layout(location=2) in vec4 aMeta;
+out vec4 vPos;
+out vec4 vVel;
+uniform float uDt;
+uniform vec3 uD0;      // MW merkezi - M31 merkezi (adım başı)
+uniform vec3 uD1;      // adım sonu
+uniform vec3 uAG[2];   // merkezlerin çekim ivmesi
+uniform vec3 uAD[2];   // merkezlerin dinamik sürtünme ivmesi
+uniform float uGate;   // yıldız oluşumu (starburst) geçidi: birleşmeden sonra gaz tükenir
+${GLSL_GRAV}
+vec3 acc(int p, vec3 x, vec3 Dp) {
+  float w = 1.0 / (1.0 + dot(x, x) / 625.0);
+  return galAccel(p, x) + galAccel(1 - p, Dp + x) - uAG[p] - (1.0 - w) * uAD[p];
+}
+void main() {
+  int p = aMeta.x > 0.5 ? 1 : 0;
+  float sg = p == 0 ? 1.0 : -1.0;
+  vec3 x = aPos.xyz;
+  vec3 v = aVel.xyz;
+  vec3 Dp = sg * uD0;
+  vec3 a = acc(p, x, Dp);
+  float r = length(x) + 0.03;
+  float om = max(sqrt(length(galAccel(p, x)) / r), 0.7 * length(v) / r);
+  int n = int(clamp(ceil(uDt * om / 0.12), 1.0, 24.0));
+  float h = uDt / float(n);
+  for (int i = 0; i < 24; i++) {
+    if (i >= n) break;
+    v += 0.5 * h * a;
+    x += h * v;
+    Dp = sg * mix(uD0, uD1, float(i + 1) / float(n));
+    a = acc(p, x, Dp);
+    v += 0.5 * h * a;
+  }
+  vec3 De = sg * uD1;
+  vec3 gt = galAccel(1 - p, De + x) - galAccel(1 - p, De);
+  float tide = length(gt) / (length(galAccel(p, x)) + 1e-7);
+  float ex = mix(aPos.w, min(tide, 3.0) * uGate, 1.0 - exp(-uDt / 70.0));
+  vPos = vec4(x, ex);
+  vVel = vec4(v, 0.0);
+  gl_Position = vec4(0.0);
+}`;
+const FS_NULL = `#version 300 es
+precision mediump float; out vec4 o; void main(){ o = vec4(0.0); }`;
+
+/* ------------------------------------------------------------- yıldız / toz çizimi */
+const VS_STAR = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aPos;
+layout(location=1) in vec4 aVel;
+layout(location=2) in vec4 aMeta;   // ebeveyn, ışıma, tohum, düzenli-disk
+layout(location=3) in vec4 aMeta2;  // boyut, kol genliği, renk, patlama kazancı
+uniform mat4 uView;
+uniform mat4 uProj;
+uniform vec3 uCen[2];     // galaksi merkezi - kamera hedefi
+uniform vec3 uNrm[2];
+uniform vec3 uE1[2];
+uniform vec4 uArm[2];     // m, cot(pitch), m*Ωp*t, R0
+uniform vec4 uBar[2];     // bar yarıçapı, bar açısı
+uniform vec3 uTintG[2];
+uniform float uFocal, uMinPx, uMaxPx, uSizeMul, uExposure, uPass, uNearFade, uFluxExp, uArmMix, uQuench;
+out vec4 vCol;
+void main() {
+  int p = aMeta.x > 0.5 ? 1 : 0;
+  vec3 x = aPos.xyz;
+  vec4 V = uView * vec4(uCen[p] + x, 1.0);
+  float d = -V.z;
+  if (d < 0.01) { gl_Position = vec4(3.0, 3.0, 3.0, 1.0); gl_PointSize = 0.0; vCol = vec4(0.0); return; }
+
+  float lum = aMeta.y;
+  float armAmp = aMeta2.y;
+  float md = 1.0;
+  if (aMeta.w > 0.5 && uArmMix > 0.001) {
+    vec3 n = uNrm[p];
+    vec3 e1 = uE1[p];
+    vec3 e2 = cross(n, e1);
+    float z = dot(x, n);
+    vec3 xp = x - n * z;
+    float R = length(xp) + 1e-3;
+    vec3 L = cross(x, aVel.xyz);
+    float al = dot(L, n) / (length(L) + 1e-8);
+    float ord = smoothstep(0.78, 0.95, al) * exp(-abs(z) / (0.9 + 0.1 * R)) * uArmMix;
+    float phi = atan(dot(xp, e2), dot(xp, e1));
+    vec4 A = uArm[p];
+    float th = A.x * (phi + A.y * log(R / A.w)) - A.z + uPass * 0.55;
+    float arm = 0.62 * pow(0.5 + 0.5 * cos(th), 2.2) + 0.38 * pow(0.5 + 0.5 * cos(2.0 * th + 1.3), 2.4);
+    float bar = 0.0;
+    if (armAmp > 0.3 && armAmp < 1.0) {
+      float rb = uBar[p].x;
+      bar = exp(-pow(R / rb, 2.0)) * pow(0.5 + 0.5 * cos(2.0 * (phi - uBar[p].y)), 3.0);
+    }
+    md = clamp(1.0 + armAmp * ord * (arm * 1.7 - 0.45) + 2.4 * bar * ord, 0.04, 14.0);
+  }
+
+  vec3 cOld = vec3(1.0, 0.80, 0.56);
+  vec3 cBulge = vec3(1.0, 0.63, 0.34);
+  vec3 cYoung = vec3(0.58, 0.75, 1.0);
+  float t = aMeta2.z;
+  if (t > 0.0) { lum *= 1.0 - 0.6 * uQuench; t *= 1.0 - 0.9 * uQuench; }     // genç mavi yıldızlar yaşlanır
+  vec3 col = t < 0.0 ? mix(cOld, cBulge, min(-t, 1.0)) : mix(cOld, cYoung, min(t, 1.0));
+  float burst = smoothstep(0.14, 1.1, aPos.w) * aMeta2.w;
+  col = mix(col, vec3(1.0, 0.56, 0.84), burst * 0.62);
+  lum *= 1.0 + 7.0 * burst;
+  col *= uTintG[p] * mix(vec3(1.0), vec3(1.0, 0.86, 0.68), uQuench * 0.6);
+
+  float px = aMeta2.x * (0.75 + 0.5 * aMeta.z) * uSizeMul * uFocal / d;
+  float sz = clamp(px, uMinPx, uMaxPx);
+  float flux = px < uMinPx ? pow(px / uMinPx, uFluxExp) : (px > uMaxPx ? uMaxPx / px : 1.0);
+  float nf = uNearFade > 0.0 ? smoothstep(uNearFade * 0.25, uNearFade, d) : 1.0;
+  float I = lum * md * flux * nf * uExposure * (1.0 + 1.6 * uQuench);   // birleşme kalıntısı: sönmüş ama yoğun eliptik
+  if (uPass > 0.5) { col = vec3(0.50, 0.70, 0.92); I *= 1.0 - 0.9 * uQuench; }
+  vCol = vec4(col * I, 1.0);
+  gl_Position = uProj * V;
+  gl_PointSize = sz;
+}`;
+const FS_STAR = `#version 300 es
+precision mediump float;
+in vec4 vCol;
+out vec4 o;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(c, c);
+  if (r2 > 1.0) discard;
+  float g = max(exp(-3.2 * r2) - 0.041, 0.0) * 1.04;
+  o = vec4(vCol.rgb * g, 1.0);
+}`;
+
+/* Güneş izi */
+const VS_TRAIL = `#version 300 es
+precision highp float;
+layout(location=0) in vec4 aP;   // xyz kamera-bağıl konum, w: yaş (0 yeni .. 1 eski)
+uniform mat4 uView, uProj;
+uniform float uSize;
+out float vA;
+void main() {
+  vec4 V = uView * vec4(aP.xyz, 1.0);
+  vA = 1.0 - aP.w;
+  gl_Position = uProj * V;
+  gl_PointSize = uSize * (0.6 + 0.6 * vA);
+  if (-V.z < 0.01) gl_Position = vec4(3.0, 3.0, 3.0, 1.0);
+}`;
+const FS_TRAIL = `#version 300 es
+precision mediump float;
+in float vA; out vec4 o;
+uniform float uAmp;
+void main() {
+  vec2 c = gl_PointCoord * 2.0 - 1.0; float r2 = dot(c, c); if (r2 > 1.0) discard;
+  float g = exp(-2.6 * r2);
+  o = vec4(vec3(1.0, 0.82, 0.38) * g * vA * vA * uAmp, 1.0);
+}`;
+
+/* Tam ekran üçgeni */
+const VS_FS = `#version 300 es
+out vec2 vUv;
+void main() {
+  vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2));
+  vUv = p;
+  gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0);
+}`;
+
+/* Arka plan: uzak yıldızlar ve soluk bulutsu */
+const FS_BG = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform mat3 uRot;           // kamera → dünya
+uniform vec2 uTan;           // tan(fov/2)*aspect , tan(fov/2)
+uniform float uPixAng;       // bir pikselin açısı (rad)
+uniform float uBg;
+float h11(float n) { return fract(sin(n) * 43758.5453123); }
+vec3 h33(vec3 p) {
+  p = vec3(dot(p, vec3(127.1, 311.7, 74.7)), dot(p, vec3(269.5, 183.3, 246.1)), dot(p, vec3(113.5, 271.9, 124.6)));
+  return fract(sin(p) * 43758.5453123);
+}
+float n3(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  float a = dot(h33(i), vec3(1.0)), b = dot(h33(i + vec3(1,0,0)), vec3(1.0)), c = dot(h33(i + vec3(0,1,0)), vec3(1.0)), d = dot(h33(i + vec3(1,1,0)), vec3(1.0));
+  float e = dot(h33(i + vec3(0,0,1)), vec3(1.0)), f2 = dot(h33(i + vec3(1,0,1)), vec3(1.0)), g = dot(h33(i + vec3(0,1,1)), vec3(1.0)), hh = dot(h33(i + vec3(1,1,1)), vec3(1.0));
+  return mix(mix(mix(a, b, f.x), mix(c, d, f.x), f.y), mix(mix(e, f2, f.x), mix(g, hh, f.x), f.y), f.z) / 3.0;
+}
+float fbm(vec3 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * n3(p); p = p * 2.03 + 11.7; a *= 0.5; } return s; }
+vec3 starLayer(vec3 d, float K, float dens, float bright, float sizePx) {
+  vec3 q = d * K;
+  vec3 cell = floor(q);
+  vec3 r = h33(cell);
+  if (r.x > dens) return vec3(0.0);
+  vec3 sp = cell + 0.15 + 0.7 * h33(cell + 7.31);
+  float dist = length(q - sp) / K;               // radyan
+  float rad = sizePx * uPixAng;
+  float g = exp(-pow(dist / rad, 2.0) * 1.6);
+  float mag = pow(h11(dot(cell, vec3(1.7, 3.1, 5.3))), 3.0);
+  float temp = h11(dot(cell, vec3(9.1, 2.3, 4.7)));
+  vec3 c = mix(vec3(1.0, 0.72, 0.5), vec3(0.62, 0.78, 1.0), temp);
+  c = mix(c, vec3(1.0), 0.45);
+  return c * g * (0.15 + mag * bright);
+}
+void main() {
+  vec2 ndc = vUv * 2.0 - 1.0;
+  vec3 dc = normalize(vec3(ndc.x * uTan.x, ndc.y * uTan.y, -1.0));
+  vec3 d = uRot * dc;
+  vec3 c = vec3(0.0);
+  c += starLayer(d, 34.0, 0.30, 1.7, 1.35);
+  c += starLayer(d, 80.0, 0.22, 1.1, 1.15);
+  c += starLayer(d, 190.0, 0.13, 0.7, 1.0);
+  float nb = fbm(d * 2.3 + 3.1);
+  float nb2 = fbm(d * 4.7 - 9.0);
+  vec3 neb = mix(vec3(0.05, 0.07, 0.16), vec3(0.16, 0.06, 0.13), nb2);
+  c += neb * pow(smoothstep(0.30, 0.80, nb), 2.0) * 0.16;
+  o = vec4(c * uBg, 1.0);
+}`;
+
+/* Bloom */
+const FS_DOWN = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform vec2 uTexel; uniform float uKaris;
+vec3 kar(vec3 c) { float l = dot(c, vec3(0.2126, 0.7152, 0.0722)); return c / (1.0 + l * 0.25); }
+void main() {
+  vec3 a = texture(uTex, vUv + uTexel * vec2(-2.0, 2.0)).rgb, b = texture(uTex, vUv + uTexel * vec2(0.0, 2.0)).rgb, c = texture(uTex, vUv + uTexel * vec2(2.0, 2.0)).rgb;
+  vec3 d = texture(uTex, vUv + uTexel * vec2(-2.0, 0.0)).rgb, e = texture(uTex, vUv).rgb, f = texture(uTex, vUv + uTexel * vec2(2.0, 0.0)).rgb;
+  vec3 g = texture(uTex, vUv + uTexel * vec2(-2.0, -2.0)).rgb, h = texture(uTex, vUv + uTexel * vec2(0.0, -2.0)).rgb, i = texture(uTex, vUv + uTexel * vec2(2.0, -2.0)).rgb;
+  vec3 j = texture(uTex, vUv + uTexel * vec2(-1.0, 1.0)).rgb, k = texture(uTex, vUv + uTexel * vec2(1.0, 1.0)).rgb;
+  vec3 l = texture(uTex, vUv + uTexel * vec2(-1.0, -1.0)).rgb, m = texture(uTex, vUv + uTexel * vec2(1.0, -1.0)).rgb;
+  vec3 r;
+  if (uKaris > 0.5) {
+    vec3 g0 = (a + b + d + e) * 0.125 * 0.25, g1 = (b + c + e + f) * 0.125 * 0.25, g2 = (d + e + g + h) * 0.125 * 0.25, g3 = (e + f + h + i) * 0.125 * 0.25, g4 = (j + k + l + m) * 0.5 * 0.25;
+    r = kar(g0 * 4.0) * 0.125 + kar(g1 * 4.0) * 0.125 + kar(g2 * 4.0) * 0.125 + kar(g3 * 4.0) * 0.125 + kar(g4 * 4.0) * 0.5;
+  } else {
+    r = e * 0.125 + (a + c + g + i) * 0.03125 + (b + d + f + h) * 0.0625 + (j + k + l + m) * 0.125;
+  }
+  o = vec4(r, 1.0);
+}`;
+const FS_UP = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform vec2 uTexel; uniform float uW;
+void main() {
+  vec3 r = texture(uTex, vUv).rgb * 4.0;
+  r += texture(uTex, vUv + uTexel * vec2(-1.0, 0.0)).rgb * 2.0 + texture(uTex, vUv + uTexel * vec2(1.0, 0.0)).rgb * 2.0;
+  r += texture(uTex, vUv + uTexel * vec2(0.0, -1.0)).rgb * 2.0 + texture(uTex, vUv + uTexel * vec2(0.0, 1.0)).rgb * 2.0;
+  r += texture(uTex, vUv + uTexel * vec2(-1.0, -1.0)).rgb + texture(uTex, vUv + uTexel * vec2(1.0, -1.0)).rgb;
+  r += texture(uTex, vUv + uTexel * vec2(-1.0, 1.0)).rgb + texture(uTex, vUv + uTexel * vec2(1.0, 1.0)).rgb;
+  o = vec4(r / 16.0 * uW, 1.0);
+}`;
+const FS_COMP = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uHdr, uBloom;
+uniform float uBloomStr, uExp, uTime, uStretch;
+vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+float asinhf(float x) { return log(x + sqrt(x * x + 1.0)); }
+float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233)) + uTime) * 43758.5453); }
+void main() {
+  vec3 c = texture(uHdr, vUv).rgb;
+  vec3 b = texture(uBloom, vUv).rgb;
+  c += b * uBloomStr;
+  c *= uExp;
+  float l = max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-5);
+  c *= asinhf(l * uStretch) / (uStretch * l);        // astronomik asinh gerdirme: soluk kuyruk + parlak çekirdek
+  l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+  c = mix(vec3(l), c, 1.18);               // hafif doygunluk
+  c = mix(c, vec3(l), smoothstep(0.5, 3.0, l) * 0.9);   // çok parlak bölgeler beyaza yaklaşır (sensör doygunluğu)
+  c = aces(max(c, 0.0));
+  c = pow(c, vec3(1.0 / 2.2));
+  vec2 q = vUv - 0.5;
+  c *= 1.0 - 0.42 * dot(q, q) * 1.6;      // vinyet
+  c += (hash(gl_FragCoord.xy) - 0.5) / 255.0;
+  o = vec4(c, 1.0);
+}`;
+
+/* ===================================================================== programlar */
+let progUpdate, progStar, progTrail, progBg, progDown, progUp, progComp;
+try {
+  progUpdate = program(VS_UPDATE, FS_NULL, ['vPos', 'vVel']);
+  progStar = program(VS_STAR, FS_STAR);
+  progTrail = program(VS_TRAIL, FS_TRAIL);
+  progBg = program(VS_FS, FS_BG);
+  progDown = program(VS_FS, FS_DOWN);
+  progUp = program(VS_FS, FS_UP);
+  progComp = program(VS_FS, FS_COMP);
+} catch (e) { fail(String(e.message || e)); return; }
+
+canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); const b = $('boot'); b.style.display = 'grid'; b.classList.remove('gone'); b.style.opacity = 1; $('bootMsg').textContent = 'Grafik bağlamı kayboldu — sayfayı yenileyin.'; });
+
+/* ====================================================================== fizik verisi */
+let C, sunTab, ana;             // merkez tablosu, Güneş tablosu, olay analizi
+let PART;                       // parçacıklar
+let N = 0, NS = 0;
+
+const MW = P.MW, M31 = P.M31;
+const GM = (m) => m * P.G;
+
+const galU = {
+  p0: new Float32Array([GM(MW.bulge.M), MW.bulge.a, GM(MW.disc.M), MW.disc.a, GM(M31.bulge.M), M31.bulge.a, GM(M31.disc.M), M31.disc.a]),
+  p1: new Float32Array([MW.disc.b, GM(MW.halo.M), MW.halo.a, 0, M31.disc.b, GM(M31.halo.M), M31.halo.a, 0]),
+  nrm: new Float32Array([MW.n[0], MW.n[1], MW.n[2], M31.n[0], M31.n[1], M31.n[2]]),
+  e1: new Float32Array([MW.e1[0], MW.e1[1], MW.e1[2], M31.e1[0], M31.e1[1], M31.e1[2]])
+};
+
+/* ======================================================================== tamponlar */
+let bufs = [], vaos = [], metaBuf, cur = 0;
+let snaps = [];                  // {k, t, buf}
+let simT = 0, simTarget = 0;
+
+function initParticles() {
+  const scale = qs.has('n') ? parseFloat(qs.get('n')) : 1;
+  PART = P.buildParticles(scale);
+  N = PART.N; NS = PART.nStars;
+  metaBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, metaBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, PART.meta, gl.STATIC_DRAW);
+  for (let i = 0; i < 2; i++) {
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    if (i === 0) gl.bufferData(gl.ARRAY_BUFFER, PART.dyn, gl.DYNAMIC_COPY);
+    else gl.bufferData(gl.ARRAY_BUFFER, N * 32, gl.DYNAMIC_COPY);
+    bufs.push(b);
+  }
+  for (let i = 0; i < 2; i++) {
+    const vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, bufs[i]);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 16);
+    gl.bindBuffer(gl.ARRAY_BUFFER, metaBuf);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 4, gl.FLOAT, false, 32, 16);
+    vaos.push(vao);
+  }
+  gl.bindVertexArray(null);
+  PART.dyn = null;   // belleği bırak
+  cur = 0;
+  simT = 0; simTarget = 0;
+  snaps = [];
+  captureSnap(0);
+}
+
+function captureSnap(k) {
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.COPY_WRITE_BUFFER, b);
+  gl.bufferData(gl.COPY_WRITE_BUFFER, N * 32, gl.STATIC_COPY);
+  gl.bindBuffer(gl.COPY_READ_BUFFER, bufs[cur]);
+  gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 0, 0, N * 32);
+  gl.bindBuffer(gl.COPY_READ_BUFFER, null); gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+  snaps[k] = { k: k, t: simT, buf: b };
+}
+function restoreSnap(s) {
+  gl.bindBuffer(gl.COPY_READ_BUFFER, s.buf);
+  gl.bindBuffer(gl.COPY_WRITE_BUFFER, bufs[cur]);
+  gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 0, 0, N * 32);
+  gl.bindBuffer(gl.COPY_READ_BUFFER, null); gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+  simT = s.t;
+}
+
+/* ============================================================== simülasyon adımı */
+const stA = new Float64Array(12), stB = new Float64Array(12), stM = new Float64Array(12);
+const forces = {};
+const uD0 = new Float32Array(3), uD1 = new Float32Array(3), uAG = new Float32Array(6), uAD = new Float32Array(6);
+let gravUploaded = false;
+
+function stepSim(dt) {
+  const t0 = simT, t1 = simT + dt;
+  P.centerState(C, t0, stA); P.centerState(C, t1, stB); P.centerState(C, t0 + 0.5 * dt, stM);
+  P.centerForces(stM, forces);
+  for (let k = 0; k < 3; k++) {
+    uD0[k] = stA[k] - stA[6 + k];
+    uD1[k] = stB[k] - stB[6 + k];
+    uAG[k] = forces.g1[k]; uAG[3 + k] = forces.g2[k];
+    uAD[k] = forces.d1[k]; uAD[3 + k] = forces.d2[k];
+  }
+  gl.useProgram(progUpdate);
+  if (!gravUploaded) {
+    gl.uniform4fv(progUpdate.u('uP0'), galU.p0);
+    gl.uniform4fv(progUpdate.u('uP1'), galU.p1);
+    gl.uniform3fv(progUpdate.u('uNrm'), galU.nrm);
+    gravUploaded = true;
+  }
+  gl.uniform1f(progUpdate.u('uDt'), dt);
+  gl.uniform3fv(progUpdate.u('uD0'), uD0);
+  gl.uniform3fv(progUpdate.u('uD1'), uD1);
+  gl.uniform3fv(progUpdate.u('uAG'), uAG);
+  gl.uniform3fv(progUpdate.u('uAD'), uAD);
+  gl.uniform1f(progUpdate.u('uGate'), 1 - smooth(events.tMerge - 700, events.tMerge + 60, t0));
+  gl.bindVertexArray(vaos[cur]);
+  gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, bufs[1 - cur]);
+  gl.enable(gl.RASTERIZER_DISCARD);
+  gl.beginTransformFeedback(gl.POINTS);
+  gl.drawArrays(gl.POINTS, 0, N);
+  gl.endTransformFeedback();
+  gl.disable(gl.RASTERIZER_DISCARD);
+  gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+  gl.bindVertexArray(null);
+  cur = 1 - cur;
+  simT = t1;
+  // anlık görüntü
+  const k = Math.floor(simT / SNAP_EVERY + 1e-9);
+  if (k > 0 && !snaps[k]) captureSnap(k);
+}
+
+const DT_MAX = 1.5;
+function advanceTo(target, maxSteps) {
+  let steps = 0;
+  while (simT < target - 1e-6 && steps < maxSteps) {
+    const remain = target - simT;
+    const n = Math.max(1, Math.ceil(remain / DT_MAX));
+    const dt = Math.min(remain, DT_MAX, remain / Math.min(n, maxSteps - steps));
+    stepSim(Math.max(dt, 1e-3));
+    steps++;
+  }
+  return steps;
+}
+
+/* ===================================================================== hedefler / kamera */
+const V3 = {
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  len: (a) => Math.hypot(a[0], a[1], a[2]),
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+};
+
+function centersAt(t, out) {
+  P.centerState(C, t, stM);
+  out.mw = [stM[0], stM[1], stM[2]]; out.m31 = [stM[6], stM[7], stM[8]];
+  out.vmw = [stM[3], stM[4], stM[5]]; out.vm31 = [stM[9], stM[10], stM[11]];
+  return out;
+}
+function sunAt(t) {   // mutlak konum ve MW'ye göre yerel konum
+  let f = t / C.h; f = clamp(f, 0, C.n - 1.001);
+  const i = Math.floor(f), u = f - i;
+  const T = C.tab, S = sunTab;
+  const loc = [0, 0, 0], ab = [0, 0, 0];
+  for (let k = 0; k < 3; k++) {
+    loc[k] = S[6 * i + k] * (1 - u) + S[6 * (i + 1) + k] * u;
+    const cm = T[12 * i + k] * (1 - u) + T[12 * (i + 1) + k] * u;
+    ab[k] = cm + loc[k];
+  }
+  return { abs: ab, loc: loc };
+}
+const cam = {
+  mode: 'cinema', yaw: 0, pitch: 0.55, zoom: 0, dist: 0, snap: true, fov: 42 * Math.PI / 180,
+  orbit: true, skyYaw: 0, skyPitch: 0, skyLook: 'm31', skyFov: 68 * Math.PI / 180,
+  distMW: 55, distM31: 90
+};
+(function initCam() {
+  // İlk görünüm: iki galaksiyi birleştiren eksen ekranda yataya yakın olsun
+  const a = P.SC.sepDir;
+  cam.yaw = Math.atan2(a[1], a[0]) + Math.PI / 2 * (qs.has('flip') ? -1 : 1);
+  cam.yaw0 = cam.yaw;
+})();
+if (qs.has('yaw')) cam.yaw = parseFloat(qs.get('yaw')) * Math.PI / 180;
+if (qs.has('pitch')) cam.pitch = parseFloat(qs.get('pitch')) * Math.PI / 180;
+if (qs.has('zoom')) cam.zoom = Math.log(parseFloat(qs.get('zoom')));
+if (qs.get('cam')) cam.mode = qs.get('cam');
+if (qs.has('noorbit')) cam.orbit = false;
+if (qs.has('look')) cam.skyLook = qs.get('look');
+if (qs.has('fov')) { cam.skyFov = parseFloat(qs.get('fov')) * Math.PI / 180; }
+
+function frameHalf(sep, t) {          // görüntü yarı yüksekliği (kpc)
+  let H = 0.46 * sep + 40;
+  const late = smooth(6800, 9000, t);
+  H = Math.max(H, 50 + 14 * late);
+  return H;
+}
+
+function mat4Persp(fovy, aspect, n, f) {
+  const t = 1 / Math.tan(fovy / 2), m = new Float32Array(16);
+  m[0] = t / aspect; m[5] = t; m[10] = (f + n) / (n - f); m[11] = -1; m[14] = 2 * f * n / (n - f);
+  return m;
+}
+// kamera: göz konumu (hedefe göre), bakış yönü, yukarı -> görünüm matrisi (satırlar s,u,-f)
+function mat4Look(eye, fwd, up) {
+  const f = V3.norm(fwd);
+  let s = V3.cross(f, up); s = V3.norm(s);
+  const u = V3.cross(s, f);
+  const m = new Float32Array(16);
+  m[0] = s[0]; m[4] = s[1]; m[8] = s[2]; m[12] = -V3.dot(s, eye);
+  m[1] = u[0]; m[5] = u[1]; m[9] = u[2]; m[13] = -V3.dot(u, eye);
+  m[2] = -f[0]; m[6] = -f[1]; m[10] = -f[2]; m[14] = V3.dot(f, eye);
+  m[3] = 0; m[7] = 0; m[11] = 0; m[15] = 1;
+  return { m: m, s: s, u: u, f: f };
+}
+
+/* ===================================================================== hedef-render */
+const W = { w: 0, h: 0, css: [0, 0], scale: 1, dpr: 1 };
+let hdr = null, bloomLv = [];
+function makeTarget(w, h) {
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  const fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  return { tex: tex, fbo: fbo, w: w, h: h };
+}
+function freeTarget(t) { if (t) { gl.deleteTexture(t.tex); gl.deleteFramebuffer(t.fbo); } }
+
+let resScale = 1;
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+  const cw = window.innerWidth, ch = window.innerHeight;
+  const w = Math.max(2, Math.round(cw * dpr * resScale)), h = Math.max(2, Math.round(ch * dpr * resScale));
+  if (w === W.w && h === W.h) return;
+  W.w = w; W.h = h; W.css = [cw, ch]; W.dpr = dpr * resScale;
+  canvas.width = w; canvas.height = h;
+  freeTarget(hdr); bloomLv.forEach(freeTarget); bloomLv = [];
+  hdr = makeTarget(w, h);
+  let bw = w >> 1, bh = h >> 1;
+  for (let i = 0; i < 6; i++) { bloomLv.push(makeTarget(Math.max(2, bw), Math.max(2, bh))); bw >>= 1; bh >>= 1; }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+window.addEventListener('resize', resize);
+
+/* ======================================================================== durum / arayüz */
+const S = {
+  playing: true, speed: 1, rate: 60, rateSm: 60,
+  labels: true, trail: true, dust: true, seeking: false, seekTarget: null,
+  ui: !qs.has('ui') || qs.get('ui') !== '0', ffSteps: qs.has('ff') ? parseInt(qs.get('ff')) : 36
+};
+const events = { t0: 0, phases: [] };
+const trailBuf = gl.createBuffer();
+const TRAIL_MAX = 1400;
+const trailArr = new Float32Array(TRAIL_MAX * 4);
+const trailVao = gl.createVertexArray();
+gl.bindVertexArray(trailVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, trailBuf);
+gl.bufferData(gl.ARRAY_BUFFER, trailArr.byteLength, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+gl.bindVertexArray(null);
+const emptyVao = gl.createVertexArray();
+
+const camNow = {};       // her karenin kamera durumu (etiketler için)
+
+function sepAt(t) { let f = clamp(t / C.h, 0, C.n - 1); const i = Math.floor(f), u = f - i; return ana.sep[i] * (1 - u) + ana.sep[Math.min(C.n, i + 1)] * u; }
+function relVelAt(t) { centersAt(t, cn); return Math.hypot(cn.vmw[0] - cn.vm31[0], cn.vmw[1] - cn.vm31[1], cn.vmw[2] - cn.vm31[2]) / P.KMS; }
+const cn = {};
+
+/* ---------------------------------------------------------------- anlatı aşamaları */
+function buildPhases() {
+  const peri = ana.peri.filter((p) => p.sep > 1.0 || true);
+  // anlamlı geçişler: birbirine 150 Myr'den yakın olanları at
+  const P1 = ana.peri[0];
+  let P2 = null;
+  for (let i = 1; i < ana.peri.length; i++) if (ana.peri[i].t > P1.t + 400) { P2 = ana.peri[i]; break; }
+  // birleşme: sonraki tüm zamanlarda ayrılık < 4 kpc olduğu ilk an
+  let tMerge = TMAX;
+  for (let i = Math.round((P2 ? P2.t : P1.t) / C.h); i < C.n; i++) {
+    let ok = true;
+    for (let j = i; j < Math.min(C.n, i + Math.round(800 / C.h)); j += 10) if (ana.sep[j] > 4.0) { ok = false; break; }
+    if (ok) { tMerge = i * C.h; break; }
+  }
+  let tContact = 0;
+  for (let i = 0; i < C.n; i++) if (ana.sep[i] < 260) { tContact = i * C.h; break; }
+  const p1 = P1.t, a1 = ana.apo.find((a) => a.t > p1) || { t: p1 + 800, sep: 100 };
+  events.P1 = P1; events.P2 = P2; events.tMerge = tMerge; events.tContact = tContact; events.A1 = a1;
+  const ph = [];
+  ph.push({ t0: 0, phase: 'Bugün', title: 'Yaklaşma', text: 'Andromeda (M31) 2,5 milyon ışık yılı uzakta; saniyede yaklaşık 110 km hızla bize doğru geliyor. Gökyüzündeki en uzak, çıplak gözle görülebilen nesne.' });
+  ph.push({ t0: tContact, phase: 'Aşama I', title: 'Halolar iç içe geçiyor', text: 'Görünmez karanlık madde haleleri birbirine değiyor. Çekim, diskleri ve dış yıldızları şimdiden çarpıtmaya başlıyor.' });
+  ph.push({ t0: Math.max(tContact + 200, p1 - 220), phase: 'Aşama II', title: 'Birinci yakın geçiş', text: 'İki disk birbirine yalnızca ~' + Math.round(P1.sep) + ' kpc yaklaşarak sıyrılıp geçiyor. Gel-git kuvvetleri yıldızları disklerden koparıyor.' });
+  ph.push({ t0: p1 + 230, phase: 'Aşama III', title: 'Gel-git kuyrukları', text: 'Koparılan yıldızlar yüz binlerce ışık yılı uzunluğunda kuyruklar ve köprüler çiziyor. Dinamik sürtünme galaksilerin yörünge enerjisini alıyor.' });
+  if (P2) ph.push({ t0: P2.t - 340, phase: 'Aşama IV', title: 'Geri dönüş ve ikinci geçiş', text: 'Yavaşlayan galaksiler birbirine geri düşüyor. Çekirdekler bu kez çok daha yakından, sürtünerek geçiyor.' });
+  ph.push({ t0: Math.max((P2 ? P2.t : p1) + 350, tMerge - 700), phase: 'Aşama V', title: 'Çekirdekler kaynaşıyor', text: 'Karışan yıldız kütlesi kendi kendini yeniden düzenliyor; diskler dağılıp kabarıyor.' });
+  ph.push({ t0: tMerge, phase: 'Sonuç', title: 'Milkomeda', text: 'İki sarmal galaksi dev bir eliptik galaksiye dönüştü. Güneş yeni galaksinin içinde, kendi yolunda dolanmayı sürdürüyor.' });
+  for (let i = 1; i < ph.length; i++) if (ph[i].t0 <= ph[i - 1].t0 + 30) ph[i].t0 = ph[i - 1].t0 + 60;
+  events.phases = ph;
+}
+
+/* ------------------------------------------------------------------- zaman çizelgesi */
+const tl = $('tl'), tlc = tl.getContext('2d');
+let tlW = 0, tlH = 0;
+function tlResize() {
+  const r = tl.getBoundingClientRect(), d = Math.min(2, window.devicePixelRatio || 1);
+  tlW = r.width; tlH = r.height; tl.width = Math.round(tlW * d); tl.height = Math.round(tlH * d);
+  tlc.setTransform(d, 0, 0, d, 0, 0);
+}
+function drawTimeline() {
+  if (!tlW) return;
+  const c = tlc, w = tlW, h = tlH, padL = 6, padR = 6, x0 = padL, x1 = w - padR;
+  c.clearRect(0, 0, w, h);
+  const X = (t) => x0 + (x1 - x0) * (t / TMAX);
+  const base = h - 14, top = 20;
+  const Y = (s) => base - (base - top) * clamp(Math.log(Math.max(s, 1.5)) / Math.log(820), 0, 1);
+  // eğri
+  c.beginPath();
+  c.moveTo(X(0), base);
+  const step = 20;
+  for (let t = 0; t <= TMAX; t += step) c.lineTo(X(t), Y(sepAt(t)));
+  c.lineTo(X(TMAX), base); c.closePath();
+  const grd = c.createLinearGradient(0, top, 0, base);
+  grd.addColorStop(0, 'rgba(141,188,255,.30)'); grd.addColorStop(1, 'rgba(255,185,107,.04)');
+  c.fillStyle = grd; c.fill();
+  c.beginPath();
+  for (let t = 0; t <= TMAX; t += step) { const x = X(t), y = Y(sepAt(t)); if (t === 0) c.moveTo(x, y); else c.lineTo(x, y); }
+  c.strokeStyle = 'rgba(210,225,255,.55)'; c.lineWidth = 1.2; c.stroke();
+  // oynatılmış bölge
+  c.save(); c.beginPath(); c.rect(x0, 0, X(simT) - x0, h); c.clip();
+  c.beginPath();
+  for (let t = 0; t <= TMAX; t += step) { const x = X(t), y = Y(sepAt(t)); if (t === 0) c.moveTo(x, y); else c.lineTo(x, y); }
+  c.strokeStyle = 'rgba(255,200,140,.95)'; c.lineWidth = 1.8; c.stroke();
+  c.lineTo(X(TMAX), base); c.lineTo(x0, base); c.closePath();
+  c.fillStyle = 'rgba(255,185,107,.10)'; c.fill();
+  c.restore();
+  // milyar yıl işaretleri
+  c.font = '10px ui-monospace, Menlo, monospace'; c.textAlign = 'center';
+  for (let g = 0; g <= TMAX; g += 1000) {
+    const x = X(g);
+    c.fillStyle = 'rgba(255,255,255,.22)'; c.fillRect(Math.round(x), base + 1, 1, 4);
+    if (g % 2000 === 0) { c.fillStyle = 'rgba(233,237,246,.42)'; c.fillText(String(g / 1000), x, h - 1); }
+  }
+  // olaylar
+  const marks = [];
+  if (events.P1) marks.push({ t: events.P1.t, s: events.P1.sep, l: '1. geçiş' });
+  if (events.P2) marks.push({ t: events.P2.t, s: events.P2.sep, l: '2. geçiş' });
+  if (events.tMerge && events.tMerge < TMAX) marks.push({ t: events.tMerge, s: 2, l: 'birleşme' });
+  c.textAlign = 'center';
+  marks.forEach((m) => {
+    const x = X(m.t), y = Y(m.s);
+    c.strokeStyle = 'rgba(255,217,163,.28)'; c.lineWidth = 1; c.setLineDash([2, 3]); c.beginPath(); c.moveTo(x, 12); c.lineTo(x, y - 4); c.stroke(); c.setLineDash([]);
+    c.beginPath(); c.arc(x, y, 2.6, 0, 6.29); c.fillStyle = '#ffd9a3'; c.fill();
+    c.fillStyle = 'rgba(255,217,163,.9)'; c.font = '9.5px ui-sans-serif, system-ui, sans-serif';
+    if (w > 520) c.fillText(m.l, clamp(x, 28, w - 28), 9);
+  });
+  // oynatma başlığı
+  const px = X(simT);
+  c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(Math.round(px) - 0.5, 12, 1.2, base - 12 + 4);
+  c.beginPath(); c.arc(px, Y(sepAt(simT)), 4.5, 0, 6.29); c.fillStyle = '#fff'; c.shadowColor = 'rgba(255,190,120,.9)'; c.shadowBlur = 10; c.fill(); c.shadowBlur = 0;
+  // "bugün" işareti
+  c.fillStyle = 'rgba(233,237,246,.42)'; c.textAlign = 'left'; c.font = '9.5px ui-sans-serif, system-ui, sans-serif';
+}
+function tlTime(ev) {
+  const r = tl.getBoundingClientRect();
+  return clamp((ev.clientX - r.left - 6) / (r.width - 12), 0, 1) * TMAX;
+}
+(function bindTimeline() {
+  let down = false;
+  const tip = $('tlTip');
+  function showTip(ev) {
+    const t = tlTime(ev); const r = tl.getBoundingClientRect();
+    tip.style.left = clamp(ev.clientX - r.left, 40, r.width - 40) + 'px';
+    tip.textContent = '+' + fmt(t / 1000, 2) + ' milyar yıl · ' + Math.round(sepAt(t)) + ' kpc';
+    tip.style.opacity = 1;
+  }
+  tl.addEventListener('pointerdown', (e) => { down = true; try { tl.setPointerCapture(e.pointerId); } catch (err) {} seekTo(tlTime(e)); showTip(e); });
+  tl.addEventListener('pointermove', (e) => { showTip(e); if (down) seekTo(tlTime(e)); });
+  tl.addEventListener('pointerup', (e) => { down = false; });
+  tl.addEventListener('pointerleave', () => { tip.style.opacity = 0; });
+})();
+
+function seekTo(t) {
+  t = clamp(t, 0, TMAX);
+  S.seekTarget = t;
+  simTarget = t;
+  if (t < simT - 1e-6) {
+    // en yakın önceki anlık görüntü
+    let best = 0;
+    for (let k = 0; k < snaps.length; k++) if (snaps[k] && snaps[k].t <= t + 1e-6) best = k;
+    restoreSnap(snaps[best]);
+  } else if (t - simT > SNAP_EVERY * 1.2) {
+    // ileri sıçrama: mevcut durumdan devam et (zaten en yakın)
+  }
+  S.seeking = true;
+}
+
+/* ============================================================== giriş kontrolleri */
+const input = { down: false, x: 0, y: 0, touches: new Map(), pinch: 0 };
+canvas.addEventListener('pointerdown', (e) => {
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {} canvas.classList.add('drag');
+  input.touches.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (input.touches.size === 2) { const [a, b] = [...input.touches.values()]; input.pinch = Math.hypot(a.x - b.x, a.y - b.y); }
+});
+canvas.addEventListener('pointermove', (e) => {
+  const p = input.touches.get(e.pointerId); if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y; p.x = e.clientX; p.y = e.clientY;
+  if (input.touches.size === 2) {
+    const [a, b] = [...input.touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (input.pinch > 0) zoomBy(Math.log(input.pinch / d)); input.pinch = d; return;
+  }
+  if (cam.mode === 'sky') {
+    const k = cam.skyFov / W.css[1];
+    cam.skyYaw -= dx * k; cam.skyPitch = clamp(cam.skyPitch + dy * k, -1.5, 1.5);
+    if (cam.skyLook !== 'free') setSkyLook('free', true);
+  } else {
+    cam.yaw -= dx * 0.005; cam.pitch = clamp(cam.pitch + dy * 0.005, -1.5, 1.5);
+  }
+});
+function endDrag(e) { input.touches.delete(e.pointerId); if (input.touches.size < 2) input.pinch = 0; if (!input.touches.size) canvas.classList.remove('drag'); }
+canvas.addEventListener('pointerup', endDrag); canvas.addEventListener('pointercancel', endDrag);
+function zoomBy(dl) {
+  if (cam.mode === 'sky') cam.skyFov = clamp(cam.skyFov * Math.exp(dl), 6 * Math.PI / 180, 120 * Math.PI / 180);
+  else cam.zoom = clamp(cam.zoom + dl, -2.6, 2.4);
+}
+canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(clamp(e.deltaY, -200, 200) * 0.0012); }, { passive: false });
+canvas.addEventListener('dblclick', () => { cam.zoom = 0; cam.yaw = cam.yaw0; cam.pitch = 0.55; cam.skyYaw = 0; cam.skyPitch = 0; cam.skyFov = 68 * Math.PI / 180; if (cam.mode === 'sky') setSkyLook('m31'); });
+
+function setCam(m) {
+  cam.mode = m;
+  document.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === m));
+  $('skyOpts').style.display = m === 'sky' ? 'inline-flex' : 'none';
+  if (m === 'free') cam.orbit = false;
+  if (m === 'sky') { cam.skyYaw = 0; cam.skyPitch = 0; }
+  $('tgOrbit').classList.toggle('on', cam.orbit);
+}
+function setSkyLook(l, keepOffset) {
+  cam.skyLook = l;
+  if (!keepOffset) { cam.skyYaw = 0; cam.skyPitch = 0; }
+  document.querySelectorAll('[data-look]').forEach((b) => b.classList.toggle('on', b.dataset.look === l));
+}
+document.querySelectorAll('[data-cam]').forEach((b) => b.addEventListener('click', () => setCam(b.dataset.cam)));
+document.querySelectorAll('[data-look]').forEach((b) => b.addEventListener('click', () => setSkyLook(b.dataset.look)));
+function setSpeed(v) { S.speed = v; document.querySelectorAll('[data-sp]').forEach((b) => b.classList.toggle('on', parseFloat(b.dataset.sp) === v)); }
+document.querySelectorAll('[data-sp]').forEach((b) => b.addEventListener('click', () => setSpeed(parseFloat(b.dataset.sp))));
+function toggle(id, key, cb) {
+  $(id).addEventListener('click', () => { const on = !$(id).classList.contains('on'); $(id).classList.toggle('on', on); cb(on); });
+}
+toggle('tgLabels', 'labels', (v) => { S.labels = v; });
+toggle('tgTrail', 'trail', (v) => { S.trail = v; });
+toggle('tgDust', 'dust', (v) => { S.dust = v; });
+toggle('tgOrbit', 'orbit', (v) => { cam.orbit = v; });
+function setPlaying(v) {
+  S.playing = v;
+  $('btnPlay').innerHTML = v
+    ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="2" width="3.5" height="12" rx="1"/><rect x="9.5" y="2" width="3.5" height="12" rx="1"/></svg>'
+    : '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.2v11.6a.6.6 0 0 0 .9.5l9.2-5.8a.6.6 0 0 0 0-1L4.9 1.7a.6.6 0 0 0-.9.5z"/></svg>';
+}
+$('btnPlay').addEventListener('click', () => { if (simT >= TMAX - 5) restart(); else setPlaying(!S.playing); });
+function restart() { seekTo(0); setPlaying(true); }
+$('btnRestart').addEventListener('click', restart);
+$('btnInfo').addEventListener('click', () => $('info').classList.toggle('open'));
+window.addEventListener('keydown', (e) => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key;
+  if (k === ' ') { e.preventDefault(); if (simT >= TMAX - 5) restart(); else setPlaying(!S.playing); }
+  else if (k === 'ArrowRight') { seekTo(simTarget + (e.shiftKey ? 500 : 100)); }
+  else if (k === 'ArrowLeft') { seekTo(simTarget - (e.shiftKey ? 500 : 100)); }
+  else if (k === 'r' || k === 'R') restart();
+  else if (k >= '1' && k <= '5') setCam(['cinema', 'free', 'mw', 'm31', 'sky'][+k - 1]);
+  else if (k === 'l' || k === 'L') $('tgLabels').click();
+  else if (k === 't' || k === 'T') $('tgTrail').click();
+  else if (k === 'd' || k === 'D') $('tgDust').click();
+  else if (k === 'h' || k === 'H') document.body.classList.toggle('hideui');
+  else if (k === 'i' || k === 'I') $('info').classList.toggle('open');
+  else if (k === 'f' || k === 'F') $('dbg').style.display = $('dbg').style.display === 'block' ? 'none' : 'block';
+  else if (k === '[' || k === ']') {
+    const sp = [0.25, 0.5, 1, 2, 4]; let i = sp.indexOf(S.speed); i = clamp(i + (k === ']' ? 1 : -1), 0, sp.length - 1); setSpeed(sp[i]);
+  }
+});
+
+/* ======================================================================== etiketler */
+const labelsEl = $('labels');
+function mkLabel(cls, html) { const d = document.createElement('div'); d.className = 'lbl ' + cls; d.innerHTML = html; labelsEl.appendChild(d); return d; }
+const L = {
+  mw: mkLabel('mw', '<span class="dot"></span>Samanyolu<small>Yerel Grup · 1,5 × 10¹² M☉</small>'),
+  m31: mkLabel('m31', '<span class="dot"></span>Andromeda · M31<small>Yerel Grup · 1,5 × 10¹² M☉</small>'),
+  rem: mkLabel('rem', 'Milkomeda<small style="margin-left:0;letter-spacing:.06em">Samanyolu + Andromeda</small>'),
+  sun: mkLabel('sun', '<span class="ring"></span><span class="t">Güneş</span>'),
+  ska: mkLabel('sky', 'Andromeda'),
+  skg: mkLabel('sky', 'Galaktik merkez')
+};
+function project(rel, V, Pm) {
+  // rel: kamera hedefine göre konum. V, Pm: Float32 matrisler. Piksel (css) ve derinlik döner
+  const x = V[0] * rel[0] + V[4] * rel[1] + V[8] * rel[2] + V[12];
+  const y = V[1] * rel[0] + V[5] * rel[1] + V[9] * rel[2] + V[13];
+  const z = V[2] * rel[0] + V[6] * rel[1] + V[10] * rel[2] + V[14];
+  const cx = Pm[0] * x, cy = Pm[5] * y, cw = -z;
+  if (cw <= 0.001) return null;
+  return { x: (cx / cw * 0.5 + 0.5) * W.css[0], y: (0.5 - cy / cw * 0.5) * W.css[1], d: cw };
+}
+function place(el, p, dx, dy, show) {
+  if (!p || !show || p.x < -50 || p.x > W.css[0] + 50 || p.y < -50 || p.y > W.css[1] + 50) { el.classList.remove('show'); return; }
+  el.style.transform = 'translate(' + Math.round(p.x + dx) + 'px,' + Math.round(p.y + dy) + 'px)';
+  el.classList.add('show');
+}
+
+/* ======================================================================== çizim */
+const viewInfo = { V: null, Pm: null, target: [0, 0, 0], eye: [0, 0, 0], focal: 1000, fovy: 1, rot: null };
+const cs = {};       // t anındaki merkezler
+const gpuUni = {
+  arm: new Float32Array(8), bar: new Float32Array(8), cen: new Float32Array(6), tint: new Float32Array(6)
+};
+
+function computeCamera(dtReal, t) {
+  const aspect = W.w / W.h;
+  centersAt(t, cs);
+  const sep = sepAt(t);
+  const mode = cam.mode;
+  let target = [0, 0, 0], fovy = cam.fov, eye, fwd, up = [0, 0, 1];
+  if (mode === 'sky') {
+    const sun = sunAt(t);
+    target = sun.abs;
+    fovy = cam.skyFov;
+    let look;
+    if (cam.skyLook === 'gc') look = V3.norm(V3.sub(cs.mw, sun.abs));
+    else if (cam.skyLook === 'm31') look = V3.norm(V3.sub(cs.m31, sun.abs));
+    else look = cam.skyFreeDir || V3.norm(V3.sub(cs.m31, sun.abs));
+    if (cam.skyLook !== 'free') cam.skyFreeDir = look;
+    // dünya z ekseni yukarı; kullanıcı ofsetleri
+    const yaw = Math.atan2(look[1], look[0]) + cam.skyYaw, pit = Math.asin(clamp(look[2], -1, 1)) + cam.skyPitch;
+    if (cam.skyLook === 'free') { fwd = [Math.cos(pit) * Math.cos(yaw), Math.cos(pit) * Math.sin(yaw), Math.sin(pit)]; }
+    else fwd = [Math.cos(clamp(pit, -1.55, 1.55)) * Math.cos(yaw), Math.cos(clamp(pit, -1.55, 1.55)) * Math.sin(yaw), Math.sin(clamp(pit, -1.55, 1.55))];
+    eye = [0, 0, 0];
+    cam.dist = 0; cam.snap = true;
+  } else {
+    if (mode === 'cinema') { target = [0, 0, 0]; }
+    else if (mode === 'free') { target = [0, 0, 0]; }
+    else if (mode === 'mw') target = cs.mw;
+    else if (mode === 'm31') target = cs.m31;
+    let half;
+    if (mode === 'cinema' || mode === 'free') half = frameHalf(sep, t);
+    else half = mode === 'mw' ? 46 : 64;
+    half *= Math.exp(cam.zoom);
+    const wantDist = half / Math.tan(fovy / 2) * Math.max(1, 0.9 / aspect * 1.0);
+    if (!cam.dist || cam.dist <= 0 || cam.snap) { cam.dist = wantDist; cam.snap = false; }
+    const k = 1 - Math.exp(-dtReal * 3.2);
+    cam.dist = Math.exp(mix(Math.log(cam.dist), Math.log(wantDist), k));
+    const e = [Math.cos(cam.pitch) * Math.cos(cam.yaw), Math.cos(cam.pitch) * Math.sin(cam.yaw), Math.sin(cam.pitch)];
+    eye = [e[0] * cam.dist, e[1] * cam.dist, e[2] * cam.dist];
+    fwd = [-e[0], -e[1], -e[2]];
+  }
+  const look = mat4Look(eye, fwd, up);
+  const far = mode === 'sky' ? 6000 : cam.dist * 8 + 3000;
+  const Pm = mat4Persp(fovy, aspect, mode === 'sky' ? 0.004 : Math.max(0.05, cam.dist * 0.002), far);
+  viewInfo.V = look.m; viewInfo.Pm = Pm; viewInfo.target = target; viewInfo.eye = eye; viewInfo.fovy = fovy;
+  viewInfo.focal = 0.5 * W.h / Math.tan(fovy / 2);
+  viewInfo.basis = look;
+  viewInfo.aspect = aspect;
+  return viewInfo;
+}
+
+function drawFS() { gl.bindVertexArray(emptyVao); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+const galArm = [MW.arms, M31.arms];
+function render(dtReal, t, wallTime) {
+  const vi = computeCamera(dtReal, t);
+  const sky = cam.mode === 'sky';
+  // ---- HDR sahne
+  gl.bindFramebuffer(gl.FRAMEBUFFER, hdr.fbo);
+  gl.viewport(0, 0, W.w, W.h);
+  gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.disable(gl.DEPTH_TEST); gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+
+  // arka plan
+  gl.useProgram(progBg);
+  const b = vi.basis;
+  const rot = new Float32Array([b.s[0], b.s[1], b.s[2], b.u[0], b.u[1], b.u[2], -b.f[0], -b.f[1], -b.f[2]]);
+  gl.uniformMatrix3fv(progBg.u('uRot'), false, rot);
+  const th = Math.tan(vi.fovy / 2);
+  gl.uniform2f(progBg.u('uTan'), th * vi.aspect, th);
+  gl.uniform1f(progBg.u('uPixAng'), 2 * th / W.h);
+  gl.uniform1f(progBg.u('uBg'), sky ? 0.9 : 1.0);
+  drawFS();
+
+  // galaksi merkezleri (kamera hedefine göre)
+  const tg = vi.target;
+  gpuUni.cen[0] = cs.mw[0] - tg[0]; gpuUni.cen[1] = cs.mw[1] - tg[1]; gpuUni.cen[2] = cs.mw[2] - tg[2];
+  gpuUni.cen[3] = cs.m31[0] - tg[0]; gpuUni.cen[4] = cs.m31[1] - tg[1]; gpuUni.cen[5] = cs.m31[2] - tg[2];
+  for (let g = 0; g < 2; g++) {
+    const A = galArm[g];
+    gpuUni.arm[4 * g] = A.m; gpuUni.arm[4 * g + 1] = 1 / Math.tan(A.pitch);
+    gpuUni.arm[4 * g + 2] = (A.m * A.pattern * t) % (2 * Math.PI); gpuUni.arm[4 * g + 3] = A.R0;
+    gpuUni.bar[4 * g] = A.bar; gpuUni.bar[4 * g + 1] = A.barAngle + A.barSpeed * t;
+  }
+  const tintU = new Float32Array([MW.tint[0], MW.tint[1], MW.tint[2], M31.tint[0], M31.tint[1], M31.tint[2]]);
+
+  gl.useProgram(progStar);
+  const pr = progStar;
+  gl.uniformMatrix4fv(pr.u('uView'), false, vi.V);
+  gl.uniformMatrix4fv(pr.u('uProj'), false, vi.Pm);
+  gl.uniform3fv(pr.u('uCen'), gpuUni.cen);
+  gl.uniform3fv(pr.u('uNrm'), galU.nrm);
+  gl.uniform3fv(pr.u('uE1'), galU.e1);
+  gl.uniform4fv(pr.u('uArm'), gpuUni.arm);
+  gl.uniform4fv(pr.u('uBar'), gpuUni.bar);
+  gl.uniform3fv(pr.u('uTintG'), tintU);
+  gl.uniform1f(pr.u('uFocal'), vi.focal);
+  gl.uniform1f(pr.u('uMinPx'), 3.0 * W.dpr);
+  gl.uniform1f(pr.u('uMaxPx'), (sky ? 15 : 90) * W.dpr);
+  gl.uniform1f(pr.u('uSizeMul'), sky ? 0.6 : 1.0);
+  gl.uniform1f(pr.u('uExposure'), QT.starExp);
+  gl.uniform1f(pr.u('uNearFade'), sky ? 4.5 : 0.0);
+  gl.uniform1f(pr.u('uFluxExp'), 1.7);
+  // spiral örüntü: birleşme ilerledikçe silinir (uzaklığa bağlı)
+  gl.uniform1f(pr.u('uArmMix'), 1.0);
+  gl.uniform1f(pr.u('uQuench'), smooth(events.tMerge - 100, events.tMerge + 2200, t));
+  gl.uniform1f(pr.u('uPass'), 0.0);
+  gl.bindVertexArray(vaos[cur]);
+  gl.drawArrays(gl.POINTS, 0, NS);
+
+  if (S.dust) {
+    gl.blendFunc(gl.ZERO, gl.ONE_MINUS_SRC_COLOR);
+    gl.uniform1f(pr.u('uPass'), 1.0);
+    gl.uniform1f(pr.u('uExposure'), QT.dustExp);
+    gl.drawArrays(gl.POINTS, NS, N - NS);
+    gl.blendFunc(gl.ONE, gl.ONE);
+  }
+  gl.bindVertexArray(null);
+
+  // Güneş izi
+  if (S.trail && !sky) drawTrail(vi, t);
+
+  // ---- bloom
+  gl.disable(gl.BLEND);
+  gl.useProgram(progDown);
+  let src = hdr;
+  for (let i = 0; i < bloomLv.length; i++) {
+    const dst = bloomLv[i];
+    gl.bindFramebuffer(gl.FRAMEBUFFER, dst.fbo); gl.viewport(0, 0, dst.w, dst.h);
+    gl.bindTexture(gl.TEXTURE_2D, src.tex);
+    gl.uniform1i(progDown.u('uTex'), 0);
+    gl.uniform2f(progDown.u('uTexel'), 1 / src.w, 1 / src.h);
+    gl.uniform1f(progDown.u('uKaris'), i === 0 ? 1 : 0);
+    drawFS();
+    src = dst;
+  }
+  gl.useProgram(progUp);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE);
+  for (let i = bloomLv.length - 1; i > 0; i--) {
+    const s = bloomLv[i], d = bloomLv[i - 1];
+    gl.bindFramebuffer(gl.FRAMEBUFFER, d.fbo); gl.viewport(0, 0, d.w, d.h);
+    gl.bindTexture(gl.TEXTURE_2D, s.tex);
+    gl.uniform1i(progUp.u('uTex'), 0);
+    gl.uniform2f(progUp.u('uTexel'), 1 / s.w, 1 / s.h);
+    gl.uniform1f(progUp.u('uW'), 0.62);
+    drawFS();
+  }
+  gl.disable(gl.BLEND);
+
+  // ---- birleştirme
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, W.w, W.h);
+  gl.useProgram(progComp);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, hdr.tex);
+  gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, bloomLv[0].tex);
+  gl.uniform1i(progComp.u('uHdr'), 0); gl.uniform1i(progComp.u('uBloom'), 1);
+  gl.uniform1f(progComp.u('uBloomStr'), sky ? QT.bloom * 0.8 : QT.bloom);
+  gl.uniform1f(progComp.u('uExp'), QT.exposure);
+  gl.uniform1f(progComp.u('uStretch'), QT.stretch);
+  gl.uniform1f(progComp.u('uTime'), (wallTime % 10) * 0.37);
+  drawFS();
+  gl.activeTexture(gl.TEXTURE0);
+}
+// nitelik ayarları (görsel ayar noktaları)
+const QT = { starExp: 0.14, dustExp: 0.22, bloom: 0.40, exposure: 1.0, stretch: 1.6 };
+if (qs.has('exp')) QT.exposure = parseFloat(qs.get('exp'));
+if (qs.has('sexp')) QT.starExp = parseFloat(qs.get('sexp'));
+if (qs.has('dexp')) QT.dustExp = parseFloat(qs.get('dexp'));
+if (qs.has('bloom')) QT.bloom = parseFloat(qs.get('bloom'));
+if (qs.has('stretch')) QT.stretch = parseFloat(qs.get('stretch'));
+
+function drawTrail(vi, t) {
+  const mode = cam.mode;
+  const far = mode === 'cinema' || mode === 'free';
+  const len = far ? 1000 : 600;     // Myr
+  const iEnd = Math.min(C.n - 1, Math.floor(t / C.h));
+  const iStart = Math.max(0, iEnd - Math.round(len / C.h));
+  const stride = Math.max(1, Math.ceil((iEnd - iStart) / TRAIL_MAX));
+  let n = 0;
+  const T = C.tab, Sn = sunTab;
+  const tgNow = vi.target;
+  for (let i = iStart; i <= iEnd && n < TRAIL_MAX; i += stride) {
+    // o andaki hedef
+    let tg;
+    if (mode === 'mw') tg = [T[12 * i], T[12 * i + 1], T[12 * i + 2]];
+    else if (mode === 'm31') tg = [T[12 * i + 6], T[12 * i + 7], T[12 * i + 8]];
+    else if (mode === 'sky') tg = tgNow;
+    else tg = [0, 0, 0];
+    const ax = T[12 * i] + Sn[6 * i], ay = T[12 * i + 1] + Sn[6 * i + 1], az = T[12 * i + 2] + Sn[6 * i + 2];
+    // izi, hedefin o andaki konumuna göre; şimdiki hedef konumuna oturt
+    trailArr[4 * n] = ax - tg[0] + (tgNow[0] - (mode === 'sky' ? tgNow[0] : tgNow[0]));
+    trailArr[4 * n + 1] = ay - tg[1] + (tgNow[1] - tgNow[1]);
+    trailArr[4 * n + 2] = az - tg[2] + (tgNow[2] - tgNow[2]);
+    trailArr[4 * n + 3] = 1 - (i - iStart) / Math.max(1, iEnd - iStart);
+    n++;
+  }
+  // ilk noktalar yaşlı: w=yaş (1: eski). Yukarıdaki değer zaten (1 - oran) => yeni=0
+  gl.useProgram(progTrail);
+  gl.uniformMatrix4fv(progTrail.u('uView'), false, vi.V);
+  gl.uniformMatrix4fv(progTrail.u('uProj'), false, vi.Pm);
+  gl.uniform1f(progTrail.u('uSize'), (far ? 2.2 : 4.0) * W.dpr);
+  gl.uniform1f(progTrail.u('uAmp'), far ? 0.55 : 0.9);
+  gl.bindVertexArray(trailVao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, trailBuf);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, trailArr, 0, n * 4);
+  gl.drawArrays(gl.POINTS, 0, n);
+  gl.bindVertexArray(null);
+}
+
+/* ============================================================= HUD güncelleme */
+let hudAcc = 0, lastPhase = -1, capTimer = 0;
+function phaseIndex(t) { let k = 0; for (let i = 0; i < events.phases.length; i++) if (t >= events.phases[i].t0) k = i; return k; }
+function setCaption(k, instant) {
+  const ph = events.phases[k];
+  $('cPhase').textContent = ph.phase;
+  $('cTitle').textContent = ph.title;
+  let txt = ph.text;
+  if (ph.title === 'Milkomeda') {
+    const sun = sunAt(TMAX);
+    const d = Math.hypot(sun.abs[0], sun.abs[1], sun.abs[2]);
+    const where = d < 12 ? 'merkeze yakın bir yörüngede kalıyor' : d < 150 ? 'dış bölgelere savruluyor ama bağlı kalıyor' : 'galaksiden kopup uzaklaşıyor';
+    txt = 'İki sarmal galaksi dev bir eliptik galaksiye dönüştü. Bu senaryoda Güneş ' + where + ': Milkomeda\'nın merkezinden yaklaşık ' + Math.round(d) + ' kpc (' + Math.round(d * KPC_LY / 1000) + ' bin ışık yılı) uzakta.';
+  }
+  $('cText').textContent = txt;
+  const cap = $('caption');
+  cap.classList.remove('fade');
+  clearTimeout(capTimer);
+  capTimer = setTimeout(() => cap.classList.add('fade'), instant ? 9000 : 8500);
+}
+function updateHud(t) {
+  const sep = sepAt(t);
+  const vel = relVelAt(t);
+  const sun = sunAt(t);
+  const dSun = Math.hypot(sun.loc[0], sun.loc[1], sun.loc[2]);
+  centersAt(t, cs);
+  const dM31 = V3.len(V3.sub(cs.m31, sun.abs));
+  $('sSep').innerHTML = (sep >= 100 ? Math.round(sep) : fmt(sep, 1)) + ' kpc<small>' + fmtLy(sep * KPC_LY) + '</small>';
+  $('sVel').textContent = Math.round(vel) + ' km/s';
+  $('sSun').innerHTML = fmt(dSun, dSun < 30 ? 1 : 0) + ' kpc<small>' + fmtLy(dSun * KPC_LY) + '</small>';
+  $('sSunM').innerHTML = (dM31 >= 100 ? Math.round(dM31) : fmt(dM31, 1)) + ' kpc<small>' + fmtLy(dM31 * KPC_LY) + '</small>';
+  $('tBig').innerHTML = '+' + fmt(t / 1000, 2) + ' <em>milyar yıl</em>';
+  const k = phaseIndex(t);
+  if (k !== lastPhase) { lastPhase = k; setCaption(k); }
+}
+function fmtLy(ly) {
+  if (ly >= 1e6) return fmt(ly / 1e6, 2) + ' milyon ışık yılı';
+  if (ly >= 1e3) return fmt(ly / 1e3, ly > 1e5 ? 0 : 1) + ' bin ışık yılı';
+  return Math.round(ly) + ' ışık yılı';
+}
+
+function updateLabels(vi, t) {
+  const V = vi.V, Pm = vi.Pm, tg = vi.target;
+  const rel = (p) => [p[0] - tg[0], p[1] - tg[1], p[2] - tg[2]];
+  const sep = sepAt(t);
+  const merged = sep < 6 && t > (events.P1 ? events.P1.t : 0);
+  const sky = cam.mode === 'sky';
+  const on = S.labels;
+  const pm = project(rel(cs.mw), V, Pm), pa = project(rel(cs.m31), V, Pm);
+  const scrSep = pm && pa ? Math.hypot(pm.x - pa.x, pm.y - pa.y) : 0;
+  const showGal = on && !sky && !merged && scrSep > 90;
+  place(L.mw, pm, 16, -34, showGal);
+  place(L.m31, pa, 16, -34, showGal);
+  const mid = merged && pm ? pm : null;
+  place(L.rem, mid, 26, -32, on && !sky && merged);
+  const sun = sunAt(t);
+  const ps = project(rel(sun.abs), V, Pm);
+  place(L.sun, ps, 0, 0, on && !sky && ps && vi.focal * 0.4 / ps.d > 0.4 && (cam.mode !== 'cinema' || true) && sepZoomOK(vi));
+  if (sky) {
+    const rpx = pa ? clamp(28 / pa.d * vi.focal / W.dpr, 6, 240) : 0;
+    place(L.ska, pa, -34, -(rpx * 0.8 + 22), on);
+    const rg = pm ? clamp(6 / pm.d * vi.focal / W.dpr, 10, 120) : 0;
+    place(L.skg, pm, -50, -(rg + 24), on);
+  } else { place(L.ska, null, 0, 0, false); place(L.skg, null, 0, 0, false); }
+}
+function sepZoomOK(vi) {   // Güneş etiketi yalnızca yeterince yakınlaşınca
+  return cam.mode === 'mw' || cam.mode === 'sky' || (viewHalfKpc(vi) < 260);
+}
+function viewHalfKpc(vi) { return cam.dist * Math.tan(vi.fovy / 2); }
+
+/* ============================================================= ana döngü */
+let lastNow = 0, frameNo = 0, fpsAcc = 0, fpsN = 0, fps = 60, gpuMs = 0;
+function computeRate(t) {
+  const sep = sepAt(t);
+  let r = clamp(0.9 * (sep + 25), 26, 480);
+  const afterMerge = events.tMerge && t > events.tMerge - 200;
+  if (afterMerge) r = mix(r, 130, smooth(events.tMerge - 200, events.tMerge + 300, t));
+  return r;
+}
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dtReal = Math.min(0.05, lastNow ? (now - lastNow) / 1000 : 0.016);
+  lastNow = now;
+  frameNo++;
+  fpsAcc += dtReal; fpsN++;
+  if (fpsAcc > 0.5) { fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0; adaptQuality(); }
+
+  // ---- zaman ilerletme
+  let steps = 0;
+  if (S.seeking) {
+    steps = advanceTo(S.seekTarget, S.ffSteps);
+    if (simT >= S.seekTarget - 1e-3) { S.seeking = false; S.seekTarget = null; }
+    $('seeking').classList.toggle('on', S.seeking && Math.abs(simTarget - simT) > 250);
+  } else if (S.playing) {
+    S.rateSm = mix(S.rateSm, computeRate(simT), 1 - Math.exp(-dtReal * 2.5));
+    simTarget = Math.min(TMAX, simTarget + S.rateSm * S.speed * dtReal);
+    steps = advanceTo(simTarget, 44);
+    if (simTarget >= TMAX) { setPlaying(false); }
+    // GPU geride kaldıysa hedefi geri çek
+    if (simT < simTarget - 60) simTarget = simT;
+  }
+  const t = simT;
+
+  if (cam.orbit && cam.mode !== 'sky' && cam.mode !== 'free') { cam.yaw += dtReal * 0.03; }
+
+  render(dtReal, t, now / 1000);
+  hudAcc += dtReal;
+  if (hudAcc > 0.09 || frameNo < 8) { hudAcc = 0; updateHud(t); drawTimeline(); }
+  updateLabels(viewInfo, t);
+
+  if (frameNo === 3 && !window.__booted) bootDone();
+  if ($('dbg').style.display === 'block') $('dbg').textContent = 'fps ' + fps.toFixed(0) + '  N ' + N + '  t ' + t.toFixed(0) + ' Myr  rate ' + S.rateSm.toFixed(0) + ' Myr/s  res ' + W.w + 'x' + W.h + ' (' + resScale.toFixed(2) + ')  steps ' + steps + '\nsep ' + sepAt(t).toFixed(1) + ' kpc  dist ' + cam.dist.toFixed(0);
+  if (qs.has('ready') && S.seekTarget === null && !S.seeking && frameNo > (window.__readyFrame || 0) + 4) document.body.dataset.ready = '1';
+}
+let lowFps = 0, highFps = 0;
+function adaptQuality() {
+  if (qs.has('nores')) return;
+  if (fps < 30) { lowFps++; highFps = 0; } else if (fps > 52) { highFps++; lowFps = 0; } else { lowFps = 0; highFps = 0; }
+  if (lowFps >= 3 && resScale > 0.55) { resScale = Math.max(0.55, resScale - 0.15); W.w = 0; resize(); lowFps = 0; }
+  else if (highFps >= 8 && resScale < 1) { resScale = Math.min(1, resScale + 0.1); W.w = 0; resize(); highFps = 0; }
+}
+function bootDone() {
+  window.__booted = true;
+  if (qs.has('ready')) { $('boot').style.display = 'none'; $('boot').style.transition = 'none'; }
+  $('boot').classList.add('gone');
+  if (S.ui) {
+    $('camBar').style.display = '';
+    document.getElementById('btnInfo').style.display = 'block';
+    document.body.classList.toggle('hideui', false);
+  } else document.body.classList.add('hideui');
+  setTimeout(() => { $('boot').style.display = 'none'; }, 1400);
+  setTimeout(() => { $('hint').classList.add('gone'); }, 14000);
+}
+
+/* ============================================================= başlatma */
+function boot() {
+  try {
+    const t0 = performance.now();
+    C = P.integrateCenters(0.5);
+    ana = P.analyze(C);
+    sunTab = P.integrateSun(C, 0.1);
+    const t1 = performance.now();
+    initParticles();
+    buildPhases();
+    const t2 = performance.now();
+    window.__timing = { physics: t1 - t0, particles: t2 - t1 };
+    $('infoN').textContent = Math.round(N / 1000) + ' bin';
+    console.log('[sim] fizik ' + (t1 - t0).toFixed(0) + ' ms, parçacıklar ' + (t2 - t1).toFixed(0) + ' ms, N=' + N);
+    resize(); tlResize();
+    setCam(cam.mode);
+    setPlaying(!(qs.get('play') === '0' || qs.has('t')));
+    if (qs.has('speed')) setSpeed(parseFloat(qs.get('speed')));
+    if (qs.has('t')) { window.__readyFrame = 0; seekTo(parseFloat(qs.get('t'))); }
+    if (qs.has('debug')) $('dbg').style.display = 'block';
+    lastNow = 0;
+    setCaption(0, true);
+    requestAnimationFrame(frame);
+    window.addEventListener('resize', tlResize);
+    window.__sim = { readEx: () => { const n = Math.min(N, 30000); const a = new Float32Array(n * 8); gl.bindBuffer(gl.ARRAY_BUFFER, bufs[cur]); gl.getBufferSubData(gl.ARRAY_BUFFER, 0, a, 0, n * 8); gl.bindBuffer(gl.ARRAY_BUFFER, null); const ex = []; for (let i = 0; i < n; i += 3) ex.push(a[8 * i + 3]); ex.sort((p, q) => p - q); return JSON.stringify([0.5, 0.9, 0.99, 0.999].map((f) => +ex[Math.floor(ex.length * f)].toFixed(3))); }, P: P, C: C, ana: ana, sunTab: sunTab, events: events, cam: cam, S: S, seekTo: seekTo, get simT() { return simT; }, get N() { return N; } };
+  } catch (e) {
+    console.error(e); fail('Başlatılamadı: ' + (e.message || e));
+  }
+}
+setTimeout(boot, 60);
+})();
+</script>
+</body>
+</html>

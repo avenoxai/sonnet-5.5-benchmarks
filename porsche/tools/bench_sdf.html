@@ -1,0 +1,46 @@
+<!doctype html><meta charset="utf-8"><title>bench</title>
+<script>
+(async () => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const gl = c.getContext('webgl2');
+  gl.getExtension('EXT_color_buffer_float');
+  const nx = 575, ny = 250, nz = 175;
+  const vs = `#version 300 es
+  void main(){ vec2 p = vec2((gl_VertexID<<1)&2, gl_VertexID&2); gl_Position = vec4(p*2.-1.,0,1); }`;
+  // heavy-ish SDF: 120 smooth-unioned ellipsoids
+  let body = 'float d = 1e9;\n';
+  for (let i = 0; i < 120; i++) {
+    const a = (i * 0.61803) % 1, b = (i * 0.3819) % 1, cc = (i * 0.7549) % 1;
+    body += `d = smin(d, sdEll(p - vec3(${(a*4-2).toFixed(3)},${(b*1.2+.1).toFixed(3)},${(cc*1.8-.9).toFixed(3)}), vec3(${(.2+a*.4).toFixed(2)},${(.1+b*.2).toFixed(2)},${(.15+cc*.3).toFixed(2)})), 0.1);\n`;
+  }
+  const fs = `#version 300 es
+  precision highp float; out float o;
+  uniform vec3 uMin; uniform vec3 uStep; uniform int uSlice; uniform vec2 uRes;
+  float smin(float a,float b,float k){ float h=max(k-abs(a-b),0.)/k; return min(a,b)-h*h*k*.25; }
+  float sdEll(vec3 p, vec3 r){ float k0=length(p/r); float k1=length(p/(r*r)); return k0*(k0-1.)/k1; }
+  float map(vec3 p){ ${body} return d; }
+  void main(){ vec3 p = uMin + uStep*vec3(gl_FragCoord.xy-.5, float(uSlice)); o = map(p); }`;
+  const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(sh); return sh; };
+  const t0 = performance.now();
+  const pr = gl.createProgram(); gl.attachShader(pr, mk(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, fs)); gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw gl.getProgramInfoLog(pr);
+  gl.useProgram(pr);
+  const tc = performance.now();
+  const rt = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, rt); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, nx, ny);
+  const fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, rt, 0);
+  gl.viewport(0, 0, nx, ny);
+  gl.uniform3f(gl.getUniformLocation(pr, 'uMin'), -2.4, 0.0, -1.1); const st = 0.008; gl.uniform3f(gl.getUniformLocation(pr, 'uStep'), st, st, st);
+  const uS = gl.getUniformLocation(pr, 'uSlice');
+  const vol = new Float32Array(nx * ny * 2);
+  let sum = 0;
+  const t1 = performance.now();
+  for (let k = 0; k < nz; k++) {
+    gl.uniform1i(uS, k); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.readPixels(0, 0, nx, ny, gl.RED, gl.FLOAT, vol, (k & 1) * nx * ny);
+    sum += vol[(k & 1) * nx * ny + 1000];
+  }
+  const t2 = performance.now();
+  const res = `compile+link ${(tc - t0).toFixed(0)}ms; eval+readback ${nx}x${ny}x${nz}=${(nx*ny*nz/1e6).toFixed(1)}M voxels with 120 ellipsoids: ${(t2 - t1).toFixed(0)}ms (sum ${sum.toFixed(2)})`;
+  console.log(res); window.__res = res; window.__ready = true;
+})().catch(e => { console.error('ERR ' + e); window.__ready = true; });
+</script>

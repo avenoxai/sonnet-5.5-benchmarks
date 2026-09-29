@@ -1,0 +1,17 @@
+{
+  "name": "mekanik-saat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gerçek çalışan 3D mekanik kol saati",
+  "scripts": {
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=app.js",
+    "dev": "esbuild src/main.js --bundle --format=iife --target=es2020 --sourcemap --outfile=app.js"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  },
+  "type": "module"
+}

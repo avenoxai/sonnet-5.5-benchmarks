@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bir Fincan Kahvenin Yolculuğu</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #efe9d8; font-family: "Bradley Hand", "Chalkboard SE", "Noteworthy", ui-rounded, system-ui, sans-serif; color: #1e2b7a; overflow: hidden; }
+  #wrap { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+  canvas { display: block; background: #f4efe2; box-shadow: 0 6px 30px rgba(60, 40, 10, .18); cursor: pointer; }
+  #play { position: absolute; top: calc(50% - 28px); left: 50%; transform: translate(-50%, -50%); border: 3px solid #1e2b7a; background: rgba(244, 239, 226, .92); color: #1e2b7a; font: 700 26px/1 inherit; font-family: inherit; padding: 18px 34px; border-radius: 40px 34px 42px 36px; cursor: pointer; box-shadow: 4px 5px 0 #f28c1e; }
+  #play:hover { transform: translate(-50%, -50%) rotate(-1.5deg); }
+  #wrap.playing #play { display: none; }
+  #controls { width: min(100vw, calc(100vh - 56px)); height: 56px; display: flex; align-items: center; gap: 14px; font-size: 15px; }
+  #barwrap { flex: 1; height: 10px; background: #e0d6bb; border-radius: 6px; cursor: pointer; overflow: hidden; }
+  #bar { height: 100%; width: 0; background: #f28c1e; }
+  #time { min-width: 110px; text-align: right; padding-right: 8px; }
+  a.dl { color: #1e2b7a; padding-left: 8px; }
+  body.capture #controls, body.capture #play { display: none; }
+  body.capture #wrap { justify-content: flex-start; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c" width="1080" height="1080"></canvas>
+  <button id="play">▶ Başlat</button>
+  <div id="controls"><a class="dl" href="turk-kahvesi-yolculugu.mp4" download>⬇ video (mp4)</a><div id="barwrap"><div id="bar"></div></div><div id="time">0.0 / 79.2 sn</div></div>
+</div>
+<audio id="audio" preload="auto">
+  <source src="muzik.m4a" type="audio/mp4">
+</audio>
+<script src="src/audio-data.js"></script>
+<script src="src/engine.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/font.js"></script>
+<script src="src/props.js"></script>
+<script src="src/scenes/intro.js"></script>
+<script src="src/scenes/tahtakale.js"></script>
+<script src="src/scenes/yola.js"></script>
+<script src="src/scenes/yol.js"></script>
+<script src="src/scenes/kusatma.js"></script>
+<script src="src/scenes/viyana.js"></script>
+<script src="src/scenes/avrupa.js"></script>
+<script src="src/scenes/final.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><title>read bench</title>
+<script src="../js/core.js"></script>
+<script>
+(async () => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const gl = c.getContext('webgl2'); gl.getExtension('EXT_color_buffer_float');
+  const nx = 590, ny = 250, N = 175;
+  const pr = PG.glu.program(gl, PG.glu.FULLSCREEN_VS, `#version 300 es
+  precision highp float; out float o; uniform float uS; void main(){ o = sin(gl_FragCoord.x*0.1+uS)*cos(gl_FragCoord.y*0.1); }`, 'b');
+  gl.useProgram(pr);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex); gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32F, nx, ny);
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  gl.viewport(0, 0, nx, ny);
+  const uS = gl.getUniformLocation(pr, 'uS');
+  const buf = new Float32Array(nx * ny);
+  const res = [];
+  const T = f => { const t = performance.now(); f(); return performance.now() - t; };
+  // warm
+  for (let i = 0; i < 5; i++) { gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, nx, ny, gl.RED, gl.FLOAT, buf); }
+  res.push('sync full: ' + T(() => { for (let i = 0; i < N; i++) { gl.uniform1f(uS, i); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, nx, ny, gl.RED, gl.FLOAT, buf); } }).toFixed(0));
+  const one = new Float32Array(1);
+  res.push('sync 1px: ' + T(() => { for (let i = 0; i < N; i++) { gl.uniform1f(uS, i); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, 1, 1, gl.RED, gl.FLOAT, one); } }).toFixed(0));
+  res.push('draw only x175 + one final read: ' + T(() => { for (let i = 0; i < N; i++) { gl.uniform1f(uS, i); gl.drawArrays(gl.TRIANGLES, 0, 3); } gl.readPixels(0, 0, 1, 1, gl.RED, gl.FLOAT, one); }).toFixed(0));
+  // PBO ring, 2 in flight
+  const pbos = [0, 1, 2, 3].map(() => { const b = gl.createBuffer(); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, b); gl.bufferData(gl.PIXEL_PACK_BUFFER, nx * ny * 4, gl.STREAM_READ); return b; });
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  const issue = i => { gl.uniform1f(uS, i); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[i & 3]); gl.readPixels(0, 0, nx, ny, gl.RED, gl.FLOAT, 0); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); };
+  const fetch = i => { gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbos[i & 3]); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, buf); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null); };
+  for (const ahead of [1, 2, 3]) {
+    res.push(`pbo ahead=${ahead}: ` + T(() => { for (let i = 0; i < ahead; i++) issue(i); for (let i = 0; i < N; i++) { if (i + ahead < N) issue(i + ahead); fetch(i); } }).toFixed(0));
+  }
+  // half float
+  console.log(res.join(' | ')); window.__ready = true;
+})().catch(e => { console.error('ERR ' + e); window.__ready = true; });
+</script>

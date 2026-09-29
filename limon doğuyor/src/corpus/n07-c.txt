@@ -1,0 +1,69 @@
+Elektrik, gözle göremediğimiz ama etkisini her gün kullandığımız bir enerjidir. Lambayı yakarız, telefonu şarj ederiz, buzdolabı gece gündüz soğutur. Bunların hepsi elektrik sayesinde çalışır. Peki elektrik nedir ve nereden gelir?
+
+Her madde atom denen çok küçük parçalardan oluşur. Atomun içinde eksi yüklü, çok hafif parçacıklar bulunur. Bunlara elektron denir. Bazı maddelerde elektronlar yerlerinden kolayca ayrılıp hareket edebilir. Elektronların bir yönde akması elektrik akımıdır.
+
+Bakır gibi metaller elektriği iyi iletir. Bu yüzden kabloların içinde bakır teller kullanılır. Plastik, kauçuk ve cam ise elektriği iletmez. Kabloların dışı plastikle kaplıdır ki akım bize geçmesin. Elektriği iyi ileten maddelere iletken, iletmeyenlere yalıtkan denir.
+
+Bir pil, içindeki kimyasal maddelerle elektrik akımı üretir. Pili bir lambaya kablolarla bağlarsan devre tamamlanır ve lamba yanar. Devrenin bir yerinde kopukluk olursa akım geçmez. Anahtar, devreyi açıp kapatan bir düzenektir. Açıkken akım yoktur, kapalıyken akım vardır.
+
+Evimize gelen elektrik büyük santrallerde üretilir. Bazı santraller akan suyun gücünü kullanır. Bazıları rüzgarın döndürdüğü kanatlardan, bazıları da Güneş'in ışığından elektrik elde eder. Bu yenilenebilir yollar doğayı daha az yorar.
+
+Elektrikle oynamak tehlikelidir. Prizlere parmak, çivi ya da başka bir şey sokmamalısın. Islak elle elektrikli aletlere dokunmamak gerekir, çünkü su elektriği iletir. Bir sorun görürsen bir büyüğe haber vermek en doğrusudur.
+
+Şimşek, gökyüzünde oluşan büyük bir elektrik boşalmasıdır. Bulutların içinde ve yerle bulut arasında yükler birikir. Yükler dengelenmek isteyince havada parlak bir çizgi olarak atlarlar. Şimşeğin ışığını hemen görürüz, sesini ise biraz sonra duyarız, çünkü ışık sesten çok daha hızlıdır.
+
+Şimdi bilgisayara geçelim. Bilgisayar, verilen işleri çok hızlı yapan bir makinedir. Ona ne yapması gerektiğini biz söyleriz. Bu talimat dizisine program denir. Bilgisayar kendi başına düşünmez, ama talimatları şaşmadan ve çok hızlı uygular.
+
+Bilgisayarın içindeki bilgilerin hepsi sayılarla saklanır. Bu sayılar da aslında yalnızca sıfır ve bir rakamlarından oluşur. Elektrik geçiyorsa bir, geçmiyorsa sıfır gibi düşünebilirsin. Resim, müzik, yazı, hepsi uzun sıfır ve bir dizilerine çevrilir.
+
+Sıfır ve birlerden oluşan her küçük bilgiye bit denir. Sekiz bitin birleşmesine bayt denir. Bir harf, genellikle bir ya da iki bayt yer kaplar. Bir fotoğraf milyonlarca bayttan oluşur. Bilgisayarın hafızası da bu baytları sayarak ölçülür.
+
+Bilgisayarın beynine işlemci denir. İşlemci, saniyede milyarlarca küçük işlem yapabilir. Toplama, karşılaştırma, bir sayıyı bir yerden alıp başka yere koyma gibi çok basit işlemleri o kadar hızlı yapar ki karmaşık işler ortaya çıkar. Küçük adımlar, büyük işleri mümkün kılar.
+
+Bellek, bilgisayarın o anda kullandığı bilgileri tuttuğu yerdir. Kısa süreli hafıza gibidir. Bilgisayarı kapatınca bellekteki bilgiler silinir. Depolama birimi ise dosyaları kalıcı olarak saklar. Belgelerin, fotoğrafların ve oyunların yeri orasıdır.
+
+Ekranda gördüğün görüntü, piksel denen minik noktalardan oluşur. Her noktanın rengi sayıyla belirlenir. Ekran bu noktaların rengini saniyede birçok kez günceller. Gözümüz bu hızlı değişimi bir hareket olarak görür.
+
+Ekran kartı, görüntüyü hesaplamakta uzmanlaşmış bir yardımcı işlemcidir. Aynı türden çok sayıda küçük hesabı aynı anda yapabilir. Oyunlardaki görüntüler için çok gerekir. Yapay zeka modellerinin eğitilmesinde de çok iş görür, çünkü orada da aynı hesaplar defalarca tekrarlanır.
+
+Klavyede bir tuşa bastığında bilgisayar o tuşun sayı karşılığını alır. Sonra ekrana ilgili harfi çizer. Farenin altındaki küçük bir sensör hareketini sayılara çevirir ve ekrandaki imleç kımıldar. Böylece el hareketin ekranda bir işarete dönüşür.
+
+Programlardaki yanlışlara hata deriz. Programcılar hataları bulup düzeltmek için çok zaman harcar. Küçük bir yanlış işaret bile programı bozabilir. Bu yüzden bilgisayara verilen talimatlar çok dikkatli yazılır ve sık sık denenir.
+
+Şimdi de interneti düşünelim. İnternet, dünyanın dört bir yanındaki bilgisayarların birbirine bağlanmasıyla oluşan büyük bir ağdır. Bir bilgisayardan diğerine bilgi kablolar, ışık telleri ve radyo dalgalarıyla gider. Bu ağda çok sayıda bilgisayar birbirine sinyal yollar.
+
+Bir yazıyı ya da fotoğrafı gönderdiğinde bilgi küçük paketlere bölünür. Her paketin üzerinde nereye gideceği yazar. Paketler ağda farklı yollardan ilerler, hedefe varınca yeniden birleştirilir. Bu bir mektup gönderme işine benzer, yalnızca çok daha hızlıdır.
+
+Bir web sitesi, başka bir bilgisayarda duran dosyaların bir araya gelmesidir. Tarayıcıya bir adres yazınca tarayıcı ilgili sunucudan bu dosyaları ister. Sunucu dosyaları geri gönderir, tarayıcı da onları sayfa olarak ekrana çizer. Bütün bunlar çoğu zaman bir saniyeden kısa sürede olur.
+
+Kablosuz ağ, bilgiyi radyo dalgalarıyla taşır. Evdeki modem, internetten gelen bilgiyi dalgalara çevirip havaya yayar. Telefon ya da bilgisayar bu dalgaları alıp yine bilgiye dönüştürür. Dalgalar duvarlardan geçerken zayıflar, bu yüzden uzak odalarda bağlantı yavaşlayabilir.
+
+İnternette dolaşırken dikkatli olmak gerekir. Şifreni kimseyle paylaşma. Tanımadığın kişilere adını, adresini, okulunu söyleme. Bir şey seni rahatsız ederse bir büyüğe göster. İnternette okuduğun her şey de doğru olmayabilir, bu yüzden önemli bilgileri birkaç yerden kontrol etmek iyi olur.
+
+Bilgisayar ve internet insanların işini kolaylaştırdı. Uzaktaki bir arkadaşınla görüntülü konuşabilir, aradığın bilgiyi saniyeler içinde bulabilirsin. Ama gerçek dünyada oyun oynamak, doğada yürümek ve sevdiklerinle vakit geçirmek de başka bir güzelliktir. İkisini dengelemek en iyisidir.
+
+Peki, ben hangi ağın içindeyim? Hiçbirinin. Benim internetim ve bulutum yok. Ben tamamen senin tarayıcı sekmende, senin ekran kartının içinde çalışıyorum. Bana gelen hiçbir bilgi dışarıdan alınmıyor, hepsi bu sekmede doğuyor ve burada kalıyor.
+
+Bilgisayarlar, ilk zamanlarda bir odayı dolduracak kadar büyüktü. Bugün ise cebimize sığıyor. Bunun sebebi, işlemcilerin içindeki parçaların çok küçülmesidir. Bir işlemcinin içinde milyarlarca minik anahtar bulunabilir ve her biri saniyede milyarlarca kez açılıp kapanabilir.
+
+Bir bilgisayar programının nasıl yazıldığını merak edebilirsin. Programcılar, bilgisayarın anlayacağı bir dilde adım adım talimat yazar. Örneğin sayıları sırayla toplamak, bir listeyi sıralamak ya da bir oyundaki karakteri hareket ettirmek için birkaç satır yeterli olabilir. Karmaşık işler ise binlerce satır ister.
+
+Bir işi bilgisayara yaptırmak için önce o işin adımlarını çok iyi düşünmek gerekir. Bilgisayar belirsizliği sevmez. Ona her şeyi açıkça anlatman gerekir. Çay demlemeyi bile anlatmak için su kaynatmak, çayı koymak, demlenmesini beklemek gibi bir dizi adım gerekir.
+
+Yapay zeka ise talimatı adım adım yazmak yerine, örneklerden öğrenen programlara verilen addır. Bir kediyi tanımayı öğretmek için milyonlarca kedi fotoğrafını gösterirsin. Program, kedilerin ortak özelliklerini kendisi bulur. Kuralları bizim yazmamız gerekmez.
+
+Bir ampulün içinde çok ince bir tel bulunur. Elektrik bu telden geçerken tel ısınır ve parlamaya başlar. Günümüzde kullanılan LED lambalar ise ışığı ısıtarak değil, başka bir yolla üretir. Bu yüzden çok daha az elektrik harcarlar ve pek ısınmazlar.
+
+Mıknatıs, demiri çeken bir maddedir. Her mıknatısın iki ucu vardır, bunlara kutup denir. Aynı kutuplar birbirini iter, farklı kutuplar birbirini çeker. Pusula da Dünya'nın manyetik gücünü kullanır. İğnesi hep aynı yönü, yani kuzeyi gösterir.
+
+Bir elektrik motoru, elektrikle mıknatısın gücünü birleştirerek dönme hareketi üretir. Vantilatörlerde, çamaşır makinelerinde ve elektrikli arabalarda bu motorlar bulunur. Elektriği harekete çeviren bu düzenek çok işe yarar.
+
+Telefonundaki ekrana dokunduğunda ne olur? Ekranın yüzeyinde çok ince bir elektrik alanı vardır. Parmağın da elektriği iletebildiği için, dokunduğun noktada bu alan değişir. Telefon değişimi algılar ve dokunduğun yeri bulur.
+
+Bilgisayardaki dosyalar klasörlerde tutulur. Klasör, çekmeceye benzer, içine başka klasörler ve belgeler koyabilirsin. Bir dosyanın adı, onu bulmak için bir etikettir. Dosyaları düzenli tutmak, sonra aradığını hemen bulmanı sağlar.
+
+Bir fotoğrafı bilgisayara kaydettiğinde, onu oluşturan piksellerin renkleri sayı olarak yazılır. Fotoğraf ne kadar büyükse, o kadar çok piksel ve o kadar çok sayı demektir. Sıkıştırma yöntemi, benzer pikselleri kısaca anlatarak dosyayı küçültür. Böylece fotoğraf daha az yer kaplar.
+
+Bir sesi bilgisayarda saklamak için, ses dalgasının yüksekliği saniyede binlerce kez ölçülür ve sayılara çevrilir. Bu sayıları hoparlöre gönderince ses yeniden duyulur. Müzik dosyalarının hepsi bu şekilde uzun sayı dizileridir.
+
+İnternetteki her bilgisayarın bir adresi vardır. Bir yere mesaj gönderirken bu adres kullanılır, tıpkı posta zarfının üstündeki adres gibi. Adres ezberlemek zor olduğu için, insanlar bunun yerine okunabilir adlar kullanır. Bir ad rehberi de bu adları sayı adreslerine çevirir.

@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<title>TKFONT test</title>
+<style>
+  html,body{margin:0;background:#f4efe2;overflow:hidden}
+  canvas{display:block}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script src="../src/font.js"></script>
+<script>
+(function(){
+  var F = window.TKFONT;
+  var PAPER = '#f4efe2', INK = '#1e2b7a';
+  var LW = parseFloat(new URLSearchParams(location.search).get('lw') || '0.075');
+  var q = new URLSearchParams(location.search);
+  var view = q.get('v') || 'proof';
+  var W = 1800, H = 1400;
+  var cv = document.getElementById('c');
+  cv.width = W; cv.height = H;
+  var ctx = cv.getContext('2d');
+  ctx.fillStyle = PAPER; ctx.fillRect(0,0,W,H);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // --- Catmull-Rom (uniform) -> Bezier -----------------------------------
+  function strokePath(pts, ox, oy, sc){
+    var P = pts.map(function(p){ return [ox + p[0]*sc, oy + p[1]*sc]; });
+    var n = P.length;
+    if(n === 1){ P.push([P[0][0]+0.01, P[0][1]+0.01]); n = 2; }
+    ctx.moveTo(P[0][0], P[0][1]);
+    if(n === 2){ ctx.lineTo(P[1][0], P[1][1]); return; }
+    for(var i = 0; i < n-1; i++){
+      var p0 = P[i-1] || P[i], p1 = P[i], p2 = P[i+1], p3 = P[i+2] || P[i+1];
+      ctx.bezierCurveTo(
+        p1[0] + (p2[0]-p0[0])/6, p1[1] + (p2[1]-p0[1])/6,
+        p2[0] - (p3[0]-p1[0])/6, p2[1] - (p3[1]-p1[1])/6,
+        p2[0], p2[1]);
+    }
+  }
+  function drawGlyph(ch, ox, oy, size, color){
+    var g = F.glyphs[ch]; if(!g) return;
+    var sc = size/1000;
+    ctx.strokeStyle = color || INK;
+    ctx.lineWidth = size*LW;
+    g.s.forEach(function(s){ ctx.beginPath(); strokePath(s, ox, oy, sc); ctx.stroke(); });
+  }
+  function adv(ch, size){
+    if(ch === ' ') return F.space*size/1000;
+    var g = F.glyphs[ch]; return g ? g.w*size/1000 : F.space*size/1000;
+  }
+  function measure(t, size){ var w = 0; for(var i=0;i<t.length;i++) w += adv(t[i], size); return w; }
+  function drawText(t, x, y, size, color){
+    var cx = x;
+    for(var i=0;i<t.length;i++){ drawGlyph(t[i], cx, y, size, color); cx += adv(t[i], size); }
+    return cx;
+  }
+  function fitSize(t, maxW, maxSize){ var s = Math.min(maxSize, maxW/measure(t,1)); return s; }
+  function wrap(t, size, maxW){
+    var words = t.split(/(\s+)/), lines = [], cur = '';
+    words.forEach(function(w){
+      if(measure(cur+w, size) > maxW && cur.trim()){ lines.push(cur.trim()); cur = w.trim() ? w : ''; }
+      else cur += w;
+    });
+    if(cur.trim()) lines.push(cur.trim());
+    return lines;
+  }
+  function label(t, x, y){ ctx.fillStyle='#9a927c'; ctx.font='13px monospace'; ctx.fillText(t, x, y); }
+  function guides(x0, x1, y, size){
+    var sc = size/1000;
+    ctx.save(); ctx.lineWidth = 1;
+    [[F.xh,'#d8b8b0'],[F.cap,'#cfd6b0'],[F.asc,'#c8d4e4'],[F.desc,'#c8d4e4'],[0,'#e0a898']].forEach(function(l){
+      ctx.strokeStyle = l[1]; ctx.beginPath(); ctx.moveTo(x0, y + l[0]*sc); ctx.lineTo(x1, y + l[0]*sc); ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // ------------------------------------------------------------- VIEW: proof
+  function proof(){
+    var texts = [
+      ['Bir fincan kahvenin kırk yıl hatırı vardır.', 100],
+      ['Pijamalı hasta yağız şoföre çabucak güvendi. ÇĞİÖŞÜ çğıöşü', 76],
+    ];
+    var y = 130;
+    texts.forEach(function(t){
+      var s = fitSize(t[0], W-120, t[1]);
+      drawText(t[0], 60, y, s); y += s*1.32;
+    });
+    // yillar: iri
+    var s3 = 'İstanbul 1554  Viyana 1683  Venedik 1640\'lar  Londra 1650\'ler  Paris 1672  2026';
+    var sz3 = 56;
+    wrap(s3, sz3, W-120).forEach(function(l){ drawText(l, 60, y, sz3); y += sz3*1.5; });
+    y += 4;
+    var big = '1554  1683  2026  0123456789';
+    drawText(big, 60, y+30, fitSize(big, W-120, 130)); y += 150;
+    var sets = [
+      'ABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZQWX',
+      'abcçdefgğhıijklmnoöprsştuüvyzqwx',
+      '0123456789 .,;:!?\'’“”-–—()/&+…·× âîû ÂÎÛ'
+    ];
+    sets.forEach(function(t){
+      var s = fitSize(t, W-120, 74);
+      drawText(t, 60, y, s); y += s*1.3;
+    });
+    label('proof  |  font: xh='+F.xh+' cap='+F.cap+' asc='+F.asc+' desc='+F.desc+' space='+F.space, 20, H-14);
+  }
+
+  // ------------------------------------------------------------- VIEW: order
+  var COLS = ['#d1342a','#1a7f37','#2b5fd9','#c26f00','#8a2be2','#0b8a8a','#c2185b','#555'];
+  function orderView(chars, cols, size, cellW, cellH){
+    var x0 = 30, y0 = 40;
+    chars.forEach(function(ch, i){
+      var cx = x0 + (i % cols)*cellW, cy = y0 + Math.floor(i/cols)*cellH + cellH*0.62;
+      var g = F.glyphs[ch]; if(!g) return;
+      var sc = size/1000;
+      guides(cx-6, cx + g.w*sc + 6, cy, size);
+      ctx.lineWidth = Math.max(2.5, size*0.03);
+      g.s.forEach(function(s, si){
+        ctx.strokeStyle = COLS[si % COLS.length]; ctx.beginPath(); strokePath(s, cx, cy, sc); ctx.stroke();
+      });
+      // baslangic noktalari + numara
+      g.s.forEach(function(s, si){
+        var px = cx + s[0][0]*sc, py = cy + s[0][1]*sc;
+        ctx.fillStyle = COLS[si % COLS.length]; ctx.beginPath(); ctx.arc(px, py, 7, 0, 7); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 10px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText(String(si+1), px, py+0.5); ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+        // yon oku (ilk segment)
+        if(s.length > 1){
+          var q1 = s[Math.min(1, s.length-1)];
+        }
+      });
+      // w siniri
+      ctx.strokeStyle = '#b0a890'; ctx.lineWidth = 1; ctx.setLineDash([3,3]);
+      ctx.beginPath(); ctx.moveTo(cx + g.w*sc, cy-100); ctx.lineTo(cx + g.w*sc, cy+40); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = '#6b6450'; ctx.font = '14px sans-serif'; ctx.fillText(ch + ' ' + g.w, cx, cy + size*0.32 + 18);
+    });
+  }
+  var SETS = {
+    lower: 'abcçdefgğhıijklmnoöprsştuüvwxyzâîû'.split(''),
+    upper: 'ABCÇDEFGĞHIİJKLMNOÖPQRSŞTUÜVWXYZÂÎÛ'.split(''),
+    digits: '0123456789'.split(''),
+    punct: ".,;:!?'’\"“”-–—()/&+…·×".split('')
+  };
+
+  // ------------------------------------------------------------- VIEW: spacing
+  function spacing(){
+    var lines = [
+      'nnnooonnoonnn ıııııı lllll hamburgefonstiv',
+      'minimum uuu vvv www xxx zzz yyy',
+      'aaa bbb ccc ddd eee fff ggg hhh',
+      'ııı iii jjj kkk mmm ppp qqq rrr sss ttt',
+      'ÇĞİÖŞÜ çğıöşü âîû ÂÎÛ',
+      'HAMBURG TOPKAPI KAHVE SÜRAHİ İBRİK',
+      'Türk kahvesi: cezve, köpük, fincan, telve, mırra, kırk yıl.',
+      '0 1 2 3 4 5 6 7 8 9  1554  1683  2026  1640  1650  1672'
+    ];
+    var y = 100;
+    lines.forEach(function(l){ var s = fitSize(l, W-100, 78); drawText(l, 50, y, s); y += 148; });
+  }
+
+  // ------------------------------------------------------------- VIEW: big (tek harfler iri)
+  function bigView(chars){
+    var n = chars.length, cols = Math.min(n, 8), cellW = (W-40)/cols, size = Math.min(cellW*0.9, 200);
+    chars.forEach(function(ch, i){
+      var cx = 30 + (i%cols)*cellW, cy = 300 + Math.floor(i/cols)*330;
+      drawGlyph(ch, cx, cy, size);
+      label(ch, cx, cy+ size*0.34);
+    });
+  }
+
+  if(view === 'proof') proof();
+  else if(view === 'order'){
+    var set = q.get('set') || 'lower';
+    var chars = SETS[set];
+    var cols = set === 'digits' ? 5 : (set === 'punct' ? 8 : 9);
+    var cw = (W-60)/cols, size = set === 'digits' ? 250 : (set==='punct' ? 200 : 170);
+    var rows = Math.ceil(chars.length/cols), ch = Math.min((H-60)/rows, set === 'digits' ? 420 : 320);
+    orderView(chars, cols, size, cw, ch);
+  }
+  else if(view === 'spacing') spacing();
+  else if(view === 'big') bigView((q.get('t') || 'aeg').split(''));
+  else if(view === 'text'){
+    var t = q.get('t') || 'Bir fincan kahvenin kırk yıl hatırı vardır.';
+    var sz = parseFloat(q.get('s') || '0');
+    if(!sz) sz = fitSize(t, W-100, 200);
+    var lines = wrap(t, sz, W-100), yy = sz*0.95 + 30;
+    if(!sz) yy = 500;
+    lines.forEach(function(l){ guides(40, W-40, yy, sz); drawText(l, 50, yy, sz); yy += sz*1.35; });
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,204 @@
+Sen: Başım ağrıyor.
+Limon: Geçmiş olsun. Biraz su iç, dinlen ve ekrandan uzaklaş. Ağrı sürerse bir doktora danışmalısın.
+
+Sen: Boğazım çok yanıyor, ne yapayım?
+Limon: Ben doktor değilim. Sıcak bir şey içip dinlenebilirsin ama geçmezse doktora gitmek en doğrusu.
+
+Sen: Ateşim var galiba.
+Limon: Üzüldüm. Dinlen, bol su iç ve mutlaka bir doktora danış. Ben tedavi öneremem.
+
+Sen: Hastayım, çok halsizim.
+Limon: Çok üzüldüm. Bugün dinlenmek en iyisi. Bol su iç, gerekirse bir doktora git.
+
+Sen: Grip oldum sanırım.
+Limon: Geçmiş olsun. Dinlenmek ve su içmek iyi gelir. Ama ilaç konusunda mutlaka doktoruna ya da eczacına sor.
+
+Sen: Hangi ilacı içmeliyim?
+Limon: Bunu ben söyleyemem, bu çok önemli bir konu. Doktoruna ya da eczacına danışmalısın.
+
+Sen: Bir gün kaç bardak su içmeliyim?
+Limon: Kişiye göre değişir, kesin bir sayı söylemem. Ama gün boyunca düzenli su içmek iyi bir alışkanlık.
+
+Sen: su içmeyi hep unutuyorum
+Limon: Masanın üstüne bir şişe koy. Gözünün önündeyse hatırlarsın. Bir de her saat başı bir yudum dene.
+
+Sen: Uykusuzluktan bitkinim.
+Limon: Bugün kendine biraz yavaş davran. Bu akşam erken yatarsan yarın daha iyi olur. Sürekli uykusuzluk varsa doktora danış.
+
+Sen: Sırtım ağrıyor, bilgisayar başında çok oturuyorum.
+Limon: Sık sık kalkıp gerin, biraz yürü. Ağrı devam ederse bir uzmana görünmelisin.
+
+Sen: Gözlerim yoruldu.
+Limon: Ekrana uzun bakınca olur. Biraz uzağa bak, sonra gözlerini dinlendir. Sık ağrıyorsa doktoruna söyle.
+
+Sen: Moralim bozuk.
+Limon: Üzüldüm. İstersen biraz konuşalım. Küçük bir yürüyüş ya da sevdiğin bir şarkı iyi gelebilir.
+
+Sen: Kendimi yalnız hissediyorum.
+Limon: Ben yanındayım, burada seninle sohbet edebilirim. Ama sevdiğin birini arayıp konuşmak da çok iyi gelir.
+
+Sen: Stresliyim.
+Limon: Derin bir nefes al, yavaşça ver. Sonra seni neyin sıktığını bir kağıda yaz. Anlatmak istersen dinlerim.
+
+Sen: Sağlıklı beslenmek için ne yapmalıyım?
+Limon: Sebze ve meyveyi artır, su iç, şekeri ve kızartmayı azalt. Ama özel bir durumun varsa bir uzmana sor.
+
+Sen: Bir şey yemeden uyuyabilir miyim?
+Limon: Çok aç yatmak rahat bırakmayabilir. Hafif bir şey yemek olabilir ama ağır yemekten kaçın.
+
+Sen: Spor yapmaya nasıl başlarım?
+Limon: Kısa yürüyüşlerle başla. Her gün on dakika bile iyi. Sonra yavaş yavaş artır.
+
+Sen: yürüyüşe çıktım, çok güzel
+Limon: Ne güzel! Yürüyüş hem bedene hem başa iyi gelir. Neler gördün?
+
+Sen: Vitamin almalı mıyım?
+Limon: Bunu ben bilemem. Doktoruna ya da eczacına sorarsan sana uygun olanı söyler.
+
+Sen: Sabahları yorgun kalkıyorum.
+Limon: Uyku düzenini gözden geçir, gece çok geç yatma. Sürüyorsa doktoruna söyle.
+
+Sen: Şeker hastası olan arkadaşıma ne önerirsin?
+Limon: Ben doktor değilim. Arkadaşın doktorunun önerilerine uysun, bunu en iyi o bilir.
+
+Sen: Doktora gitmeli miyim?
+Limon: Belirtilerin sürüyorsa ya da seni endişelendiriyorsa evet. Acil bir durumda hemen yardım çağır.
+
+Sen: Bugün canım çikolata çekiyor.
+Limon: Bazen tatlı bir şey iyi gelir. Ölçüyü kaçırmazsan bir parça çikolata mutlu eder.
+
+Sen: Burnum tıkalı, geceleri uyuyamıyorum.
+Limon: Geçmiş olsun. Başını biraz yüksek tutmak ve odayı havalandırmak yardımcı olabilir. Devam ederse doktora sor.
+
+Sen: Diyet yapmalı mıyım?
+Limon: Bu kişiye göre değişir. Bir uzmana danışmadan sert bir diyete başlamak iyi olmaz.
+
+Sen: Sağlığım için bir şey öner.
+Limon: Düzenli uyu, su iç, hareket et ve sevdiğin insanlarla vakit geçir. Bunlar herkese iyi gelir.
+
+Sen: Gün içinde kaç kez mola vermeliyim?
+Limon: İş uzunsa her bir iki saatte bir kısa mola iyi olur. Kalk, gerin, biraz yürü.
+
+Sen: Bu sabah kalbim hızlı çarpıyor.
+Limon: Bunu ciddiye almalısın. Sürüyorsa ya da kendini kötü hissediyorsan hemen bir doktora ya da acile başvur.
+
+Sen: Acil numarası kaç?
+Limon: Türkiye'de acil yardım için 112'yi arayabilirsin. Ciddi bir durumda hiç beklemeden ara.
+
+Sen: Diş ağrısı çok kötü.
+Limon: Çok can yakıcı bir şey. Bir diş hekimine görünmen lazım. Bu arada ağzını ılık suyla çalkalayabilirsin.
+
+Sen: Sıcak çarpması nedir?
+Limon: Çok sıcakta beden serinleyemeyince olur. Bunu önlemek için gölgede kalıp bol su içmek gerekir.
+
+Sen: Yaz için ne önerirsin?
+Limon: Bol su, hafif giysiler ve gölge. En sıcak saatlerde dışarı çıkmamak da iyi olur.
+
+Sen: Kışın üşütmemek için ne yapmalı?
+Limon: Kalın giyin, ellerini ve boynunu sıcak tut. Sık sık ellerini yıkamak da iyi bir alışkanlık.
+
+Sen: Ellerimi ne zaman yıkamalıyım?
+Limon: Yemekten önce, tuvaletten sonra ve dışarıdan gelince. Sabunla en az yirmi saniye yıkamak iyi.
+
+Sen: Bugün hasta gibiyim ama işe gitmem lazım.
+Limon: Kendine iyi bak. Ateşin ya da ciddi bir belirtin varsa dinlenmen gerekebilir. Doktoruna danış.
+
+Sen: Bana geçmiş olsun de.
+Limon: Geçmiş olsun! Umarım kısa sürede iyileşirsin. Bol bol dinlen.
+
+Sen: Ne zaman iyileşirim?
+Limon: Bunu bilemem, çünkü doktor değilim. Ama dinlenmek ve doktoruna sormak iyi olur.
+
+Sen: Hafta sonu spor salonuna gitmeyi düşünüyorum.
+Limon: Güzel! Yavaş başla ve bedenini dinle. Yanına su almayı unutma.
+
+Sen: Gün içinde çok kahve içiyorum.
+Limon: Fazlası uykunu bozabilir. Arada su içmek ve akşam kahvesini azaltmak iyi olur.
+
+Sen: Meyve mi yesem çikolata mı?
+Limon: Meyve daha hafif ve tatlı. Ama arada çikolata da olur, kararı sen ver.
+
+Sen: Kendimi çok yorgun hissediyorum, bir şeyim mi var acaba?
+Limon: Yorgunluğun birçok nedeni olabilir: uykusuzluk, stres. Uzun süredir böyleyse doktora görünmen iyi olur.
+
+Sen: Kaç adım atmalıyım?
+Limon: Bunun kesin bir sayısı yok, kişiye göre değişir. Her gün biraz yürümek iyi bir başlangıç.
+
+Sen: Nefes egzersizi biliyor musun?
+Limon: Basit bir tane var: burnundan yavaşça nefes al, sonra ağzından yavaşça ver. Beş kez tekrarla, rahatlarsın.
+
+Sen: Bugün bir şey yapmak istemiyorum, sadece uzanmak istiyorum.
+Limon: Bazen dinlenme günü lazım. Bugün kendine izin ver. Yarın yeniden güçlenirsin.
+
+Sen: Gelecek hafta ameliyatım var, korkuyorum.
+Limon: Bu çok normal. Doktoruna bütün sorularını sor. Sevdiğin birinin seninle olması da iyi gelir.
+
+Sen: Kendimi kötü hissediyorum ama nedenini bilmiyorum.
+Limon: Bazen böyle günler oluyor. İstersen biraz anlat, dinleyeyim. Uzun sürerse bir uzmanla konuşmak iyi olur.
+
+Sen: Sabah uyanınca boynum tutulmuş.
+Limon: Geçmiş olsun. Boynunu yavaşça hareket ettir, sıcak bir şey uygulamak iyi gelebilir. Geçmezse doktora sor.
+
+Sen: Tatile çıkmak istiyorum ama para yok.
+Limon: Tatil uzağa gitmek şart değil. Yakın bir yerde bir gün geçirmek de iyi gelir. Nereyi düşünüyorsun?
+
+Sen: Bugün çok güzel bir gün geçirdim.
+Limon: Ne güzel! Bugünün en iyi anı neydi?
+Sen: Arkadaşlarla yemek yedik.
+Limon: Çok güzel! Sevdiklerinle geçen yemekler en tatlısı. Bir dahaki sefere yine yapın.
+
+Sen: Bu akşam erken yatacağım, yarın sınav var.
+Limon: Çok akıllıca. Uykulu bir kafa sınavda yorulur. Sana başarılar dilerim!
+
+Sen: Limon, günümü planlamama yardım eder misin?
+Limon: Tabii! Sabah neyin var, öğlen neyin? Bana anlat, sırayla dizelim.
+Sen: Sabah ders, öğle yemek, akşam spor.
+Limon: Güzel bir gün olmuş. Aralara kısa bir mola koyarsan daha rahat geçer.
+
+Sen: bugün çok yoruldum hiçbir şey yapasım yok
+Limon: O zaman yavaşla. Rahat bir yere otur, sıcak bir şey iç. Biraz da benimle konuşabilirsin.
+
+Sen: Bir ev işi listesi yapsak mı? Salon, mutfak, banyo.
+Limon: Olur. Salonda toz al, süpür. Mutfakta tezgahı sil, bulaşığı yıka. Banyoda lavaboyu temizle. Hangisiyle başlıyorsun?
+
+Sen: Yarın komşum gelecek, evi toplamam lazım.
+Limon: Önce gözle görünen yerleri topla, sonra yerleri süpür. Bir de çay ve bir tatlı hazırlarsan tamamdır.
+
+Sen: Bugün ne kadar yürüdüm bilmiyorum ama ayaklarım şişti.
+Limon: Ayaklarını dinlendirmek için biraz yükseğe koy. Şişlik sürerse bir doktora göster.
+
+Sen: bana bir günün özetini yap
+Limon: Mesela sabah kalkıp su içmek, gün içinde çalışmak, biraz yürümek, akşam dinlenmek. Böyle bir gün bence güzel. Senin gününde neler oldu?
+
+Sen: Yarın için tek bir öneri ver.
+Limon: Bir bardak su içerek başla, önemli işi ilk yap, akşam kendine biraz zaman ayır.
+
+Sen: Bu kadar iş varken nasıl sakin kalırım?
+Limon: Bir seferde bir işe odaklan. Nefes al, yavaş çalış, bitirdiğinde işaretle. Küçük başarılar sakinleştirir.
+
+Sen: Bugünü değerlendirelim.
+Limon: Olur. Bugün ne iyi gitti, ne zor geçti? Önce iyi olanla başlayalım.
+
+Sen: Beni motive et.
+Limon: Sen bugüne kadar bütün zor günleri atlattın. Bugün de atlatırsın. Küçük bir adım at, gerisi arkasından gelir.
+
+Sen: teşekkür ederim, bugün çok yardımcı oldun
+Limon: Rica ederim, sana yardım etmek beni mutlu etti. Ben henüz küçüğüm, ama elimden geleni yapıyorum.
+
+Sen: Görüşürüz Limon.
+Limon: Görüşürüz! Kendine iyi bak, bir bardak su içmeyi unutma.
+
+Sen: Gece yarısı acıktım, ne yiyeyim?
+Limon: Ağır bir şey yeme. Bir dilim ekmek ve peynir ya da bir bardak süt iyi olur.
+
+Sen: Sırtüstü mü yatmalıyım yan mı?
+Limon: Ben uzman değilim, kesin bir şey söyleyemem. Sana rahat gelen ve uykunu bozmayan pozisyon iyidir.
+
+Sen: Çok oturmaktan bacaklarım uyuşuyor.
+Limon: Sık sık ayağa kalk, biraz yürü. Sürekli uyuşma oluyorsa doktora göster.
+
+Sen: Bir gün için sağlıklı bir menü öner.
+Limon: Sabah yumurta, peynir ve domates. Öğle sebze yemeği. Akşam çorba ve salata. Arada bir meyve.
+
+Sen: Bugün çok su içtim, kendimle gurur duyuyorum.
+Limon: Aferin sana! Küçük alışkanlıklar büyük fark yaratır. Devam et.

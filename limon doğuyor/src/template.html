@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Limon - sıfırdan doğan Türkçe dil modeli</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cg transform='rotate(-30 24 26)'%3E%3Cpath d='M3 26l5-2.5c2-7 8-11.500 16-11.500s14 4.500 16 11.500l5 2.500-5 2.500c-2 7-8 11.500-16 11.500s-14-4.500-16-11.500z' fill='%23f5e663'/%3E%3C/g%3E%3Cpath d='M30 12c2-6 8-8 13-7-1 6-6 9-13 7z' fill='%23a6e04a'/%3E%3C/svg%3E">
+<!--LIMON:STYLE-->
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <radialGradient id="lemonFill" cx="38%" cy="32%" r="80%">
+      <stop offset="0" stop-color="#fffbc4"/>
+      <stop offset=".45" stop-color="#f5e663"/>
+      <stop offset="1" stop-color="#d6b51c"/>
+    </radialGradient>
+    <linearGradient id="leafFill" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#6cc03a"/>
+      <stop offset="1" stop-color="#c4f26a"/>
+    </linearGradient>
+  </defs>
+  <symbol id="lemon" viewBox="0 0 48 48">
+    <g transform="rotate(-30 24 27)">
+      <path d="M2.500 27l5.500-2.800c2-7.200 8.200-11.700 16-11.700s14 4.500 16 11.700l5.500 2.800-5.500 2.800c-2 7.200-8.200 11.700-16 11.700s-14-4.500-16-11.700z" fill="url(#lemonFill)"/>
+      <path d="M11 22.500c2.800-5.200 7.500-7.800 13-7.800" fill="none" stroke="#fffdf0" stroke-opacity=".7" stroke-width="1.800" stroke-linecap="round"/>
+    </g>
+    <path d="M28.500 12.500c1.800-6.200 8-8.800 14-7.500-1.200 6.500-7 9.800-14 7.500z" fill="url(#leafFill)"/>
+    <path d="M30 11.500c3.500-2 7-3.500 10.500-4.800" fill="none" stroke="#3d8a1f" stroke-opacity=".55" stroke-width="1" stroke-linecap="round"/>
+  </symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14" fill="none" stroke="currentColor" stroke-width="2.600" stroke-linecap="round"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.500v13l11-6.500z" fill="currentColor" stroke="currentColor" stroke-width="1.500" stroke-linejoin="round"/></symbol>
+  <symbol id="i-reborn" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.500-5.800M20 4v4.500h-4.500" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.600-6.500 10-6.500S22 12 22 12s-3.600 6.500-10 6.500S2 12 2 12z" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="currentColor"/></symbol>
+  <symbol id="i-orbit" viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="9.500" ry="4" transform="rotate(-25 12 12)" fill="none" stroke="currentColor" stroke-width="1.800"/><circle cx="12" cy="12" r="2.600" fill="currentColor"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M4 12h15M13 5.500L19.500 12 13 18.500" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9.500l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.200" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<canvas id="brain" role="img" aria-label="Limon'un 3 boyutlu beyni: nöronlar, sinapslar ve harf takımyıldızı"></canvas>
+
+<div id="ui" data-boot="1">
+
+  <header id="top">
+    <div class="brand">
+      <svg class="logo" aria-hidden="true"><use href="#lemon"/></svg>
+      <h1>Limon</h1>
+      <p class="tagline">sıfırdan doğan Türkçe dil modeli · senin GPU'nda</p>
+    </div>
+    <div class="vitals">
+      <span id="gpuName" class="vital" title="Eğitimin çalıştığı ekran kartı"></span>
+      <span id="paramCount" class="vital" title="Limon'un öğrenilebilir sayı sayısı"></span>
+      <span class="age" id="ageBox">Limon'un yaşı <b id="age">00:00</b></span>
+    </div>
+  </header>
+
+  <main id="stage">
+
+    <section id="pLeft" class="panel" aria-labelledby="hTalk">
+      <div class="panel-h">
+        <h2 id="hTalk">Limon ne diyor?</h2>
+        <button type="button" class="icon-btn collapse" data-collapse="pLeft" aria-expanded="true" aria-label="Paneli daralt"><svg aria-hidden="true"><use href="#i-chev"/></svg></button>
+      </div>
+      <div class="panel-b">
+        <div id="talk" class="talk" data-stage="0" style="--g:1">
+          <div id="talkFeed" class="talk-feed" aria-live="off"></div>
+        </div>
+
+        <div class="score">
+          <div class="ring" role="img" aria-label="Türkçe skoru" id="ring">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle class="ring-track" cx="50" cy="50" r="42"/>
+              <circle class="ring-arc" id="ringArc" cx="50" cy="50" r="42" transform="rotate(-90 50 50)"/>
+            </svg>
+            <div class="ring-t"><b id="scoreVal">0</b><i>%</i></div>
+          </div>
+          <div class="score-side">
+            <span id="stageChip" class="chip" data-stage="0">Saçmalıyor</span>
+            <p id="stageHint" class="hint"></p>
+            <p id="wordStat" class="hint dim"></p>
+          </div>
+        </div>
+
+        <ol id="stageBar" class="stages" aria-label="Öğrenme aşamaları">
+          <li data-i="0"><i></i><span>Saçmalıyor</span></li>
+          <li data-i="1"><i></i><span>Harfleri tanıyor</span></li>
+          <li data-i="2"><i></i><span>Kelime uyduruyor</span></li>
+          <li data-i="3"><i></i><span>Gerçek kelimeler</span></li>
+          <li data-i="4"><i></i><span>Cümle kuruyor</span></li>
+          <li data-i="5"><i></i><span>Türkçe konuşuyor</span></li>
+        </ol>
+      </div>
+    </section>
+
+    <div id="center">
+      <div id="tools" role="toolbar" aria-label="Kontroller">
+        <button type="button" id="btnPause" class="btn" aria-label="Eğitimi duraklat" title="Duraklat (P)"><svg aria-hidden="true"><use id="pauseIcon" href="#i-pause"/></svg><span id="pauseTxt">Duraklat</span></button>
+        <button type="button" id="btnReborn" class="btn" aria-label="Limon'u yeniden doğur" title="Yeniden doğur: Limon'u baştan başlat"><svg aria-hidden="true"><use href="#i-reborn"/></svg><span id="rebornTxt">Yeniden doğur</span></button>
+        <i class="sep" aria-hidden="true"></i>
+        <button type="button" id="tSyn" class="tog" aria-pressed="true" title="Sinapslar: en güçlü ağırlık bağlantıları">Sinapslar</button>
+        <button type="button" id="tLet" class="tog" aria-pressed="true" title="Harfler: harf takımyıldızı">Harfler</button>
+        <button type="button" id="tAtt" class="tog" aria-pressed="true" title="Dikkat: hangi harf hangisine bakıyor">Dikkat</button>
+        <i class="sep" aria-hidden="true"></i>
+        <button type="button" id="tRot" class="btn icon" aria-pressed="true" aria-label="Kamera otomatik dönüş" title="Kamera otomatik dönüşü"><svg aria-hidden="true"><use href="#i-orbit"/></svg></button>
+        <button type="button" id="btnHide" class="btn icon" aria-label="Panelleri gizle (H)" title="Panelleri gizle (H): sadece beyin"><svg aria-hidden="true"><use href="#i-eye"/></svg></button>
+      </div>
+
+      <div id="dock">
+        <section id="chartCard" class="card" aria-label="Eğitim grafiği">
+          <div class="stats">
+            <div class="stat"><span>Adım</span><b id="sStep">0</b></div>
+            <div class="stat"><span>token/sn</span><b id="sTps">0</b></div>
+            <div class="stat"><span>bit/harf</span><b id="sBpc">0</b></div>
+            <div class="stat"><span>Kayıp</span><b id="sLoss">0</b></div>
+            <div class="legend" aria-hidden="true"><span class="lg train">eğitim</span><span class="lg val">doğrulama</span></div>
+          </div>
+          <div class="chart-wrap"><canvas id="chart" aria-label="Kayıp grafiği" role="img"></canvas></div>
+          <div class="knobs">
+            <label class="knob"><span>GPU payı</span><input id="rShare" type="range" min="10" max="100" step="5" value="100"><output id="oShare">%100</output></label>
+            <label class="knob"><span>Sıcaklık</span><input id="rTemp" type="range" min="0.2" max="1.5" step="0.05" value="0.8"><output id="oTemp">0,80</output></label>
+          </div>
+        </section>
+
+        <section id="notebook" class="card" aria-labelledby="hNb">
+          <div class="nb-h">
+            <h2 id="hNb">Ders defteri</h2>
+            <span class="hint dim" id="nbHint">aynı isteme verdiği serbest cevaplar</span>
+          </div>
+          <div id="nbScroll" class="nb-scroll" tabindex="0" aria-label="Ders defteri kartları, yatay kaydırılır"></div>
+        </section>
+      </div>
+    </div>
+
+    <section id="pRight" class="panel" aria-labelledby="hChat">
+      <div class="panel-h">
+        <h2 id="hChat">Sohbet</h2>
+        <button type="button" class="icon-btn collapse" data-collapse="pRight" aria-expanded="true" aria-label="Paneli daralt"><svg aria-hidden="true"><use href="#i-chev"/></svg></button>
+      </div>
+      <div class="panel-b">
+        <div id="chatLog" class="chat-log" role="log" aria-live="polite" aria-relevant="additions">
+          <p class="chat-note" id="chatNote">Limon'a bir şey yaz. Eğitim sürerken de cevap verir; her cevabın altında hangi adımdaki beyinle konuştuğunu görürsün.</p>
+        </div>
+        <div id="typing" class="typing" hidden aria-label="Limon yazıyor"><i></i><i></i><i></i><span>Limon yazıyor</span></div>
+        <div id="suggest" class="suggest">
+          <button type="button" class="pill">Merhaba!</button>
+          <button type="button" class="pill">Sen kimsin?</button>
+          <button type="button" class="pill">Ne seversin?</button>
+        </div>
+        <form id="chatForm" class="chat-form" autocomplete="off">
+          <input id="chatInput" type="text" maxlength="160" placeholder="Limon'a bir şey yaz" aria-label="Limon'a mesaj" enterkeyhint="send" spellcheck="false">
+          <button type="submit" class="send" aria-label="Gönder"><svg aria-hidden="true"><use href="#i-send"/></svg></button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+
+  <button type="button" id="btnShow" class="show-ui" aria-label="Panelleri göster (H)" hidden>
+    <svg aria-hidden="true"><use href="#i-eye"/></svg><span>Panelleri göster</span><kbd>H</kbd>
+  </button>
+</div>
+
+<div id="toasts" role="status" aria-live="polite"></div>
+
+<div id="splash" role="status">
+  <svg class="splash-logo" aria-hidden="true"><use href="#lemon"/></svg>
+  <p class="splash-t">Limon doğuyor<span class="dots" aria-hidden="true"></span></p>
+</div>
+
+<div id="fatal" hidden role="alert">
+  <div class="fatal-card">
+    <svg class="fatal-logo" aria-hidden="true"><use href="#lemon"/></svg>
+    <h2 id="fatalTitle">Limon burada doğamıyor</h2>
+    <p id="fatalMsg"></p>
+    <ul id="fatalTips"></ul>
+    <code id="fatalCode"></code>
+  </div>
+</div>
+
+<noscript><p style="position:fixed;inset:0;display:grid;place-items:center;background:#06080a;color:#f5e663;font:16px system-ui">Limon'un doğması için JavaScript gerekli.</p></noscript>
+
+<!--LIMON:SCRIPTS-->
+</body>
+</html>

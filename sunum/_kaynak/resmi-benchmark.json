@@ -1,0 +1,32 @@
+{
+  "kaynak": "https://www.anthropic.com/claude-sonnet-5-5",
+  "tarih": "28 Eylül 2026",
+  "sutunlar": ["Sonnet 5.5", "Sonnet 5", "Opus 5.5", "GPT-6 Sol"],
+  "satirlar": [
+    {"alan": "Agentic kodlama", "test": "Terminal-Bench 4.0", "degerler": ["70.6%", "10.3%", "66.4%¹", "—"]},
+    {"alan": "Agentic kodlama", "test": "FrontierCode 1.1 (Main)", "degerler": ["52.1% Xhigh / 46.2% Max²", "42.4%", "54.4%", "49.3%"]},
+    {"alan": "Agentic kodlama", "test": "CursorBench 4.0", "degerler": ["55.5%", "34.1%", "57.8%", "—"]},
+    {"alan": "Bilgi işi", "test": "GDPval-AA v2.1³ (Elo)", "degerler": ["1844", "1449", "1846", "1487⁴"]},
+    {"alan": "Bilgi işi", "test": "AA-Briefcase v1.1³ (Elo)", "degerler": ["1811", "1359", "1822", "1483⁴"]},
+    {"alan": "Çok alanlı akıl yürütme", "test": "Humanity's Last Exam (araçlarla)", "degerler": ["64.5%", "54.9%", "67.7%", "—"]},
+    {"alan": "Bilgisayar kullanımı", "test": "OSWorld 2.1 (kısmi puan)", "degerler": ["80.1%", "57.0%", "81.8%", "—"]},
+    {"alan": "Grafik okuma", "test": "Chartography (araçsız)", "degerler": ["61.6%", "15.6%", "64.4%", "53.6%⁴"]}
+  ],
+  "dipnotlar": {
+    "1": "Terminal-Bench 4.0'da Opus 5.5 Xhigh effort sonucu (en yüksek skoru).",
+    "2": "Sonnet 5.5 Max effort'ta Xhigh'tan düşük skor aldı; Max'te code-review skill'ini daha sık çalıştırıp kapsam dışı düzenleme yaptı.",
+    "3": "Artificial Analysis, sonradan düzeltilen bir yapılandırılmış çıktı hatası olan ön sürümde ölçtü; etkinin küçük olması bekleniyor.",
+    "4": "GPT-6 Sol'daki görüntü anlama hatası sonradan düzeltildi; bu skorlar henüz güncellenmemiş olabilir."
+  },
+  "fiyat_milyon_token_usd": {
+    "Sonnet 5.5": {"girdi": 2, "cikti": 10, "cache_okuma": 0.20, "cache_yazma": 2.50},
+    "Opus 5.5": {"girdi": 4, "cikti": 20, "cache_okuma": 0.20, "cache_yazma": 5}
+  },
+  "diger": [
+    "Sonnet 5'e göre %30'dan fazla hızlı çıktı üretiyor.",
+    "Anthropic'e göre çoğu işte görev başına %30'a kadar daha ucuz.",
+    "Claude Code ve uygulamalarda varsayılan effort Medium, Claude Platform'da High.",
+    "Anthropic'in cümlesi: karmaşık, açık uçlu ve sürekli muhakeme isteyen işlerde Opus 5.5 hâlâ açıkça daha güçlü.",
+    "Duyuruda Kevin Ngo (Creative Coder) alıntısı var: Opus 5.5 mimariyi kurarsa uygulamayı Sonnet 5.5'e bırakırım."
+  ]
+}

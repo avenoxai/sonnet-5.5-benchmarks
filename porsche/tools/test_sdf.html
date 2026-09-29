@@ -1,0 +1,505 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>PG.sdf test</title>
+<style>html,body{margin:0;background:#15171b;overflow:hidden}canvas{display:block}#hud{position:fixed;left:8px;top:6px;color:#9fb;font:12px monospace;white-space:pre;text-shadow:0 0 3px #000}</style>
+<canvas id="c"></canvas><div id="hud"></div>
+<script src="../js/core.js"></script>
+<script src="../js/sdf.js"></script>
+<script>
+/* tools/test_sdf.html - self-contained tests + viewer for js/sdf.js
+ *   ?test=lib | blob | thin | car | loft | attr | all      (default blob)
+ *   view params: az (deg, default 35) el (deg, default 18) dist (m) tx,ty,tz (target) wire=1 mode=shade|normals|ao|flat
+ *   blob params: v (voxel, default 0.01)
+ *   car params : v (default 0.008), n (primitive count, default 300)
+ * Every test prints results with console.log and finally sets window.__ready = true. window.__result holds a JSON summary. */
+(async () => {
+  const Q = new URLSearchParams(location.search);
+  const canvas = document.getElementById('c'), hud = document.getElementById('hud');
+  canvas.width = innerWidth; canvas.height = innerHeight;
+  const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
+  if (!gl) throw new Error('no webgl2');
+  const log = (...a) => { console.log(...a); hud.textContent += a.join(' ') + '\n'; };
+  const results = {};
+  window.__result = results;
+
+  // ------------------------------------------------------------------------------------------- viewer
+  const VS = `#version 300 es
+  layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec4 aAttr;
+  uniform mat4 uVP; out vec3 vN; out vec3 vP; out vec4 vA;
+  void main(){ vN=aNrm; vP=aPos; vA=aAttr; gl_Position = uVP*vec4(aPos,1.); }`;
+  const FS = `#version 300 es
+  precision highp float; in vec3 vN; in vec3 vP; in vec4 vA; out vec4 o;
+  uniform vec3 uEye; uniform int uMode; uniform vec3 uBase;
+  float box(vec2 p, vec2 c, vec2 h, float s){ vec2 d = abs(p-c)-h; return 1.-smoothstep(-s,s,max(d.x,d.y)); }
+  vec3 env(vec3 r){
+    float y = r.y; vec3 c = mix(vec3(.05,.055,.065), vec3(.55,.62,.72), smoothstep(-.2,1.,y));
+    c += vec3(.25)*smoothstep(-.05,-1.,y)*.3;
+    float az = atan(r.z, r.x); vec2 uv = vec2(az, y);
+    c += vec3(4.)*box(uv, vec2(.6,.55), vec2(.35,.25), .02);       // softbox 1
+    c += vec3(3.)*box(uv, vec2(-2.2,.4), vec2(.18,.5), .02);       // strip
+    c += vec3(2.5,2.4,2.2)*box(uv, vec2(2.5,.9), vec2(.5,.06), .01);
+    c += vec3(1.5)*box(uv, vec2(1.55,.15), vec2(.05,.9), .01);
+    return c;
+  }
+  void main(){
+    vec3 n = normalize(vN); if(!gl_FrontFacing) n=-n;
+    vec3 v = normalize(uEye - vP);
+    if (uMode==1){ o = vec4(n*.5+.5,1.); return; }
+    if (uMode==4){ o = vec4(fract(n*24.), 1.); return; }
+    if (uMode==2){ o = vec4(vec3(vA.x),1.); return; }
+    if (uMode==3){ vec3 fn = normalize(cross(dFdx(vP), dFdy(vP))); o = vec4(vec3(.15+.85*max(dot(fn,normalize(vec3(.4,.8,.5))),0.)),1.); return; }
+    vec3 l1 = normalize(vec3(.5,.9,.4)), l2 = normalize(vec3(-.7,.3,-.5));
+    float ao = mix(1., vA.x, .9);
+    vec3 diff = uBase*(max(dot(n,l1),0.)*vec3(1.,.96,.9) + .35*max(dot(n,l2),0.)*vec3(.6,.7,1.) + .18*ao) * mix(.35,1.,ao);
+    vec3 r = reflect(-v, n);
+    float fr = pow(1.-max(dot(n,v),0.), 4.);
+    vec3 refl = env(r) * (.04 + .96*fr) * mix(.4,1.,ao);
+    vec3 spec = env(r)*.25*mix(.5,1.,ao);
+    vec3 col = diff + refl + spec*.3 + vec3(.6,.8,1.)*fr*.25;
+    col = col/(1.+col); col = pow(col, vec3(1./2.2));
+    o = vec4(col,1.);
+  }`;
+  const LVS = `#version 300 es
+  layout(location=0) in vec3 aPos; uniform mat4 uVP; void main(){ gl_Position = uVP*vec4(aPos,1.); }`;
+  const LFS = `#version 300 es
+  precision highp float; out vec4 o; void main(){ o = vec4(0.,0.,0.,1.); }`;
+  const prog = PG.glu.program(gl, VS, FS, 'viewer'), lprog = PG.glu.program(gl, LVS, LFS, 'viewer-lines');
+  const U = PG.glu.uniforms(gl, prog), LU = PG.glu.uniforms(gl, lprog);
+  function upload(mesh) {
+    const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+    const mk = (data, loc, size) => { const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b); gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0); };
+    mk(mesh.positions, 0, 3); mk(mesh.normals, 1, 3);
+    mk(mesh.attrs || new Float32Array(mesh.positions.length / 3 * 4).fill(1), 2, 4);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, mesh.indices, gl.STATIC_DRAW);
+    const g = { vao, count: mesh.indices.length, type: mesh.indices instanceof Uint16Array ? gl.UNSIGNED_SHORT : gl.UNSIGNED_INT, lines: null };
+    if (Q.get('wire') === '1') {
+      const I = mesh.indices, L = new Uint32Array(I.length * 2);
+      for (let t = 0; t < I.length; t += 3) { L.set([I[t], I[t + 1], I[t + 1], I[t + 2], I[t + 2], I[t]], t * 2); }
+      const lb = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, lb); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, L, gl.STATIC_DRAW);
+      g.lines = { ib: lb, count: L.length };
+    }
+    gl.bindVertexArray(null);
+    return g;
+  }
+  function viewMat(p) {
+    const az = (p.az) * Math.PI / 180, el = p.el * Math.PI / 180, d = p.dist, t = p.target;
+    const eye = [t[0] + d * Math.cos(el) * Math.cos(az), t[1] + d * Math.sin(el), t[2] + d * Math.cos(el) * Math.sin(az)];
+    const V = PG.m4.lookAt(eye, t, [0, 1, 0]);
+    const P = PG.m4.perspective(35 * Math.PI / 180, canvas.width / canvas.height, d * 0.02, d * 20);
+    return { VP: PG.m4.multiply(P, V), eye };
+  }
+  function drawScene(items, p) {
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    gl.clearColor(0.09, 0.1, 0.12, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.cullFace(gl.BACK);
+    const { VP, eye } = viewMat(p);
+    const modeMap = { shade: 0, normals: 1, ao: 2, flat: 3, nbands: 4 };
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(1, 1);
+    gl.useProgram(prog); gl.uniformMatrix4fv(U.uVP, false, VP); gl.uniform3fv(U.uEye, eye); gl.uniform1i(U.uMode, modeMap[Q.get('mode') || 'shade'] || 0);
+    if (Q.get('cull') === '0') gl.disable(gl.CULL_FACE);
+    for (const it of items) {
+      gl.uniform3fv(U.uBase, it.color || [0.75, 0.08, 0.06]);
+      gl.bindVertexArray(it.g.vao); gl.drawElements(gl.TRIANGLES, it.g.count, it.g.type, 0);
+      if (it.g.lines) {
+        gl.useProgram(lprog); gl.uniformMatrix4fv(LU.uVP, false, VP);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, it.g.lines.ib); gl.drawElements(gl.LINES, it.g.lines.count, gl.UNSIGNED_INT, 0);
+        gl.useProgram(prog);
+      }
+    }
+    gl.bindVertexArray(null); gl.disable(gl.POLYGON_OFFSET_FILL);
+  }
+  const camArgs = (def) => ({
+    az: +(Q.get('az') ?? def.az ?? 35), el: +(Q.get('el') ?? def.el ?? 18), dist: +(Q.get('dist') ?? def.dist ?? 3),
+    target: [+(Q.get('tx') ?? def.t[0]), +(Q.get('ty') ?? def.t[1]), +(Q.get('tz') ?? def.t[2])],
+  });
+
+  // ------------------------------------------------------------------------------------------- mesh analysis
+  function analyze(mesh, label) {
+    const P = mesh.positions, N = mesh.normals, I = mesh.indices, nv = P.length / 3, nt = I.length / 3;
+    const D = new Float64Array(3 * nt), R = new Float64Array(3 * nt);
+    const flippedPos = []; let flipped = 0, degenerate = 0, vol = 0, nanCount = 0, area = 0;
+    for (let t = 0; t < nt; t++) {
+      const a = I[3 * t], b = I[3 * t + 1], c = I[3 * t + 2];
+      D[3 * t] = a * nv + b; D[3 * t + 1] = b * nv + c; D[3 * t + 2] = c * nv + a;
+      R[3 * t] = b * nv + a; R[3 * t + 1] = c * nv + b; R[3 * t + 2] = a * nv + c;
+      const ax = P[3 * a], ay = P[3 * a + 1], az = P[3 * a + 2], bx = P[3 * b], by = P[3 * b + 1], bz = P[3 * b + 2], cx = P[3 * c], cy = P[3 * c + 1], cz = P[3 * c + 2];
+      const ux = bx - ax, uy = by - ay, uz = bz - az, wx = cx - ax, wy = cy - ay, wz = cz - az;
+      const nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+      const l = Math.hypot(nx, ny, nz); area += l / 2;
+      if (l < 1e-12) degenerate++;
+      const vx = N[3 * a] + N[3 * b] + N[3 * c], vy = N[3 * a + 1] + N[3 * b + 1] + N[3 * c + 1], vz = N[3 * a + 2] + N[3 * b + 2] + N[3 * c + 2];
+      if (nx * vx + ny * vy + nz * vz < 0) { flipped++; if (flippedPos.length < 8) flippedPos.push([(ax + bx + cx) / 3, (ay + by + cy) / 3, (az + bz + cz) / 3].map(x => +x.toFixed(3)).join(',')); }
+      vol += (ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx)) / 6;
+    }
+    for (let i = 0; i < N.length; i++) if (!isFinite(N[i]) || !isFinite(P[i])) nanCount++;
+    let nl = 0; for (let i = 0; i < nv; i++) { nl = Math.max(nl, Math.abs(Math.hypot(N[3 * i], N[3 * i + 1], N[3 * i + 2]) - 1)); }
+    D.sort(); R.sort();
+    let dup = 0; for (let i = 1; i < D.length; i++) if (D[i] === D[i - 1]) dup++;
+    let boundary = 0, i = 0, j = 0;
+    while (i < D.length) { while (j < R.length && R[j] < D[i]) j++; if (j >= R.length || R[j] !== D[i]) boundary++; i++; }
+    const r = { verts: nv, tris: nt, boundaryEdges: boundary, dupDirectedEdges: dup, flippedTris: flipped, degenerateTris: degenerate, signedVolume: +vol.toFixed(5), area: +area.toFixed(4), nanValues: nanCount, maxNormalLenErr: +nl.toExponential(2) };
+    log(`[${label}] analysis: ` + JSON.stringify(r));
+    if (flipped) log(`[${label}] flipped tri centroids: ` + flippedPos.join(' | '));
+    return r;
+  }
+  async function residual(mesh, glsl, voxel, label, bounds) {
+    const d = await PG.sdf.sample(gl, glsl, mesh.positions, bounds ? { clip: true, min: bounds[0], max: bounds[1] } : undefined);
+    let mx = 0, sum = 0; for (const x of d) { const a = Math.abs(x); mx = Math.max(mx, a); sum += a; }
+    const r = { maxResidualVoxel: +(mx / voxel).toFixed(3), meanResidualVoxel: +(sum / d.length / voxel).toFixed(4) };
+    log(`[${label}] |map| at vertices (voxels): max ${r.maxResidualVoxel}, mean ${r.meanResidualVoxel}`);
+    return r;
+  }
+  const fmt = s => `${s.verts}v ${s.tris}t | compile ${s.msCompile.toFixed(0)} GPU ${s.msGPU.toFixed(0)} mesh ${s.msMesh.toFixed(0)} post ${s.msPost.toFixed(0)} (gpu ${(s.msPostGPU||0).toFixed(0)}, pass1 ${(s.msPass1||0).toFixed(0)}, qef-cpu ${(s.msQEF||0).toFixed(0)}, drawOnly ${(s.msDraw||0).toFixed(0)}, firstDraw ${(s.firstDraw||0).toFixed(0)}) total ${s.msTotal.toFixed(0)} ms (skip ${(100 * s.skipFrac).toFixed(0)}%)`;
+
+  // ------------------------------------------------------------------------------------------- tests
+  const tests = {};
+
+  // ---- unit tests of the GLSL library, evaluated on the GPU
+  tests.lib = async () => {
+    const T = [];
+    const t = (name, expr, exp, tol) => T.push({ name, expr, exp, tol: tol || 2e-4 });
+    // brute force helpers
+    const polyD = (pts, p) => { let d = 1e9, s = 1; const n = pts.length; for (let i = 0, j = n - 1; i < n; j = i++) { const a = pts[j], b = pts[i]; const ex = b[0] - a[0], ey = b[1] - a[1]; let u = ((p[0] - a[0]) * ex + (p[1] - a[1]) * ey) / (ex * ex + ey * ey); u = Math.max(0, Math.min(1, u)); d = Math.min(d, Math.hypot(p[0] - a[0] - ex * u, p[1] - a[1] - ey * u)); } let inside = false; for (let i = 0, j = n - 1; i < n; j = i++) { const a = pts[i], b = pts[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside ? -d : d; };
+    const ellD = (ab, p) => { let best = 1e9; for (let i = 0; i < 200000; i++) { const th = i / 200000 * Math.PI * 2; best = Math.min(best, Math.hypot(ab[0] * Math.cos(th) - p[0], ab[1] * Math.sin(th) - p[1])); } return (Math.pow(p[0] / ab[0], 2) + Math.pow(p[1] / ab[1], 2) < 1 ? -1 : 1) * best; };
+    const v3 = (x, y, z) => `vec3(${x},${y},${z})`;
+    t('sdSphere', 'sdSphere(vec3(3.,0.,0.),1.)', 2);
+    t('sdEllipsoid axis', 'sdEllipsoid(vec3(2.,0.,0.),vec3(1.,.5,.5))', 1);
+    t('sdEllipsoid centre', 'sdEllipsoid(vec3(0.),vec3(1.,.5,.7))', -0.5);
+    t('sdBox out', 'sdBox(vec3(2.,0.,0.),vec3(1.))', 1); t('sdBox in', 'sdBox(vec3(0.),vec3(1.,2.,3.))', -1); t('sdBox corner', 'sdBox(vec3(2.,2.,0.),vec3(1.))', Math.SQRT2);
+    t('sdRoundBox', 'sdRoundBox(vec3(2.,0.,0.),vec3(1.),.2)', 1); t('sdRoundBox corner', 'sdRoundBox(vec3(2.,2.,2.),vec3(1.),.2)', Math.hypot(1.2, 1.2, 1.2) - .2, 1e-3);
+    t('sdCapsule', 'sdCapsule(vec3(0.,2.,0.),vec3(-1.,0.,0.),vec3(1.,0.,0.),.25)', 1.75);
+    t('sdSegment', 'sdSegment(vec3(3.,0.,0.),vec3(-1.,0.,0.),vec3(1.,0.,0.))', 2);
+    t('sdRoundCone', 'sdRoundCone(vec3(0.,2.,0.),vec3(0.),vec3(0.,1.,0.),.5,.25)', 0.75);
+    t('sdRoundCone side', 'sdRoundCone(vec3(2.,0.,0.),vec3(0.),vec3(0.,1.,0.),.5,.5)', 1.5);
+    t('sdCylinderX', 'sdCylinderX(vec3(0.,3.,4.),1.)', 4); t('sdCylinderY', 'sdCylinderY(vec3(3.,9.,4.),1.)', 4); t('sdCylinderZ', 'sdCylinderZ(vec3(3.,4.,9.),1.)', 4);
+    t('sdCappedCylinderX', 'sdCappedCylinderX(vec3(3.,0.,0.),1.,1.)', 2); t('sdCappedCylinderY', 'sdCappedCylinderY(vec3(2.,0.,0.),1.,1.)', 1); t('sdCappedCylinderZ', 'sdCappedCylinderZ(vec3(0.,0.,3.),1.,1.)', 2);
+    t('sdCappedCylinder in', 'sdCappedCylinderZ(vec3(0.),1.,2.)', -1);
+    t('sdRoundedCylinderY', 'sdRoundedCylinderY(vec3(3.,0.,0.),1.,.2,1.)', 2);
+    t('sdCylinderAB', 'sdCylinderAB(vec3(0.,2.,0.),vec3(-1.,0.,0.),vec3(1.,0.,0.),.5)', 1.5); t('sdCylinderAB cap', 'sdCylinderAB(vec3(3.,0.,0.),vec3(-1.,0.,0.),vec3(1.,0.,0.),.5)', 2);
+    t('sdCone below base', 'sdCone(vec3(0.,-2.,0.),vec2(.70710678),1.)', 1); t('sdCone inside', 'sdCone(vec3(0.,-.5,0.),vec2(.70710678),1.)', -0.35355);
+    t('sdCappedCone', 'sdCappedCone(vec3(0.,2.,0.),1.,1.,.5)', 1); t('sdCappedCone in', 'sdCappedCone(vec3(0.),1.,1.,1.)', -1);
+    t('sdTorus', 'sdTorus(vec3(3.,0.,0.),2.,.5)', .5); t('sdTorusX', 'sdTorusX(vec3(0.,3.,0.),2.,.5)', .5); t('sdTorusZ', 'sdTorusZ(vec3(3.,0.,0.),2.,.5)', .5);
+    t('sdTorusX axis', 'sdTorusX(vec3(2.,0.,0.),2.,.5)', Math.hypot(2, 2) - .5);
+    t('sdPlane', 'sdPlane(vec3(0.,2.,0.),vec3(0.,1.,0.),1.)', 3);
+    t('sdCircle', 'sdCircle(vec2(3.,0.),1.)', 2); t('sdBox2', 'sdBox2(vec2(2.,0.),vec2(1.))', 1); t('sdBox2 in', 'sdBox2(vec2(.2,0.),vec2(1.,2.))', -0.8);
+    t('sdRoundBox2', 'sdRoundBox2(vec2(2.,2.),vec2(1.),.2)', Math.hypot(1.2, 1.2) - .2, 1e-3);
+    t('sdSegment2', 'sdSegment2(vec2(0.,2.),vec2(-1.,0.),vec2(1.,0.))', 2);
+    for (const p of [[3, 0], [0, 2], [1, 1], [0.3, 0.2], [-2.5, 1.5], [0, 0], [1.9, 0.2]]) t(`sdEllipse2 ${p}`, `sdEllipse2(vec2(${p[0].toFixed(3)},${p[1].toFixed(3)}),vec2(2.,1.))`, ellD([2, 1], p), 2e-3);
+    t('sdEllipse2 circle', 'sdEllipse2(vec2(3.,0.),vec2(1.,1.))', 2);
+    const trap = [[-1, -1], [1, -1], [.5, 1], [-.5, 1]];
+    for (const p of [[0, 2], [3, 0], [0, 0], [.7, .9], [-2, -2], [.2, -1.5]]) t(`sdTrapezoid2 ${p}`, `sdTrapezoid2(vec2(${p[0].toFixed(3)},${p[1].toFixed(3)}),1.,.5,1.)`, polyD(trap, p), 1e-4);
+    const pent = [[-1, -1], [1, -1.2], [1.5, .3], [0, 1.4], [-1.4, .4]];
+    for (const p of [[0, 0], [2, 0], [0, 2], [-2, -2], [.5, .5], [1.4, -1]]) {
+      t(`sdPolygon2(64) ${p}`, `testPoly(vec2(${p[0].toFixed(3)},${p[1].toFixed(3)}))`, polyD(pent, p), 1e-4);
+      t(`polygonGLSL ${p}`, `tPent(vec2(${p[0].toFixed(3)},${p[1].toFixed(3)}))`, polyD(pent, p), 1e-4);
+    }
+    t('opExtrude', 'opExtrude(sdCircle(vec2(2.,0.),1.),3.,1.)', Math.hypot(1, 2));
+    t('revolveX', 'length(revolveX(vec3(1.,3.,4.))-vec2(1.,5.))', 0); t('revolveY', 'length(revolveY(vec3(3.,1.,4.))-vec2(1.,5.))', 0); t('revolveZ', 'length(revolveZ(vec3(3.,4.,1.))-vec2(1.,5.))', 0);
+    t('opRevolveY torus', 'sdCircle(opRevolveY(vec3(3.,0.,0.),2.),.5)', .5);
+    t('rotZ', 'length(rotZ(PG_PI*.5)*vec3(1.,0.,0.)-vec3(0.,1.,0.))', 0, 1e-5); t('rotX', 'length(rotX(PG_PI*.5)*vec3(0.,1.,0.)-vec3(0.,0.,1.))', 0, 1e-5);
+    t('rotY', 'length(rotY(PG_PI*.5)*vec3(0.,0.,1.)-vec3(1.,0.,0.))', 0, 1e-5); t('rotAxis', 'length(rotAxis(vec3(0.,0.,2.),PG_PI*.5)*vec3(1.,0.,0.)-vec3(0.,1.,0.))', 0, 1e-5);
+    t('rot2', 'length(rot2(PG_PI*.5)*vec2(1.,0.)-vec2(0.,1.))', 0, 1e-5);
+    t('opPolarZ 60deg', 'length(opPolarZ(vec3(cos(1.0471976),sin(1.0471976),0.)*2.,6.)-vec3(2.,0.,0.))', 0, 1e-4);
+    t('opPolarZ 10deg', 'length(opPolarZ(vec3(cos(.17453),sin(.17453),0.)*2.,6.)-vec3(2.*cos(.17453),2.*sin(.17453),0.))', 0, 1e-4);
+    t('opPolarX', 'length(opPolarX(vec3(1.,cos(1.0471976),sin(1.0471976)),6.)-vec3(1.,1.,0.))', 0, 1e-4);
+    t('opPolar (Z)', 'length(opPolar(vec3(cos(1.0471976),sin(1.0471976),0.5)*2.,6.)-vec3(2.,0.,1.))', 0, 1e-4);
+    t('opPolar2i idx', 'opPolar2i(vec2(cos(2.2689),sin(2.2689)),6.,tmpIdx)*0.+tmpIdx', 2);
+    t('opRep1', 'opRep1(3.2,1.)', .2); t('opRepLim', 'opRepLim(vec3(5.,0.,0.),1.,vec3(2.,0.,0.)).x', 3);
+    t('opTwistY', 'length(opTwistY(vec3(1.,1.,0.),PG_PI*.5)-vec3(0.,1.,1.))', 0, 1e-5); t('opBendXY', 'length(opBendXY(vec3(1.,0.,0.),.5)-vec3(cos(.5),sin(.5),0.))', 0, 1e-5);
+    t('opTaperX', 'opTaperX(vec3(1.,1.,2.),1.).z', 1); t('opMirrorZ', 'opMirrorZ(vec3(1.,2.,-3.)).z', 3);
+    t('opMirrorPlane', 'opMirrorPlane(vec3(1.,-2.,0.),vec3(0.,1.,0.),0.).y', 2);
+    t('smin', 'smin(1.,1.,.5)', .875); t('smin far', 'smin(1.,3.,.5)', 1); t('smax', 'smax(1.,1.,.5)', 1.125);
+    t('sminC', 'sminC(1.,1.,.5)', 1 - .5 / 6); t('smaxC', 'smaxC(1.,1.,.5)', 1 + .5 / 6); t('sminE', 'sminE(1.,1.,1.)', 0); t('smaxE', 'smaxE(1.,1.,1.)', 2);
+    t('sSub', 'sSub(1.,-1.,.4)', 1.1); t('sInter', 'sInter(1.,1.,.4)', 1.1); t('minChamfer', 'minChamfer(1.,1.,.2)', 1); t('sminW', 'sminW(1.,1.,.5).y', .5, 1e-4);
+    t('catmullRom', 'catmullRom(0.,1.,2.,3.,.5)', 1.5); t('catmullRom v2', 'catmullRom(vec2(0.),vec2(1.),vec2(2.),vec2(3.),.5).y', 1.5);
+    t('catmullRom v3', 'catmullRom(vec3(0.),vec3(1.),vec3(2.),vec3(3.),.5).z', 1.5);
+    t('pwl4', 'pwl4(1.5,vec4(0.,1.,2.,3.),vec4(0.,10.,20.,30.))', 15); t('pwl8', 'pwl8(5.5,vec4(0.,1.,2.,3.),vec4(4.,5.,6.,7.),vec4(0.,2.,4.,6.),vec4(8.,10.,12.,14.))', 11);
+    t('plin', 'plin(5.,0.,10.,0.,100.)', 50); t('remap', 'remap(5.,0.,10.,100.,200.)', 150); t('sstep', 'sstep(1.,0.,.5)', .5);
+    t('table lin', 'tab_lin(1.5)', 2.5, 1e-4); t('table cr knot', 'tab_cr(1.)', 1, 1e-4); t('table cr mid', 'tab_cr(1.5)', 2.25, 1e-4);
+    t('polygonGLSL square out', 'tSq(vec2(2.,0.))', 1); t('polygonGLSL square in', 'tSq(vec2(0.))', -1); t('polygonGLSL square corner', 'tSq(vec2(2.,2.))', Math.SQRT2);
+    t('loft cyl side', 'loftCyl(vec3(0.,1.,0.))', 0.5, 4e-3); t('loft cyl in', 'loftCyl(vec3(0.))', -0.5, 4e-3); t('loft cyl cap', 'loftCyl(vec3(2.,0.,0.))', 1, 1e-4);
+    t('loft cyl sym side', 'loftCylS(vec3(0.,0.,-1.))', 0.5, 4e-3); t('loft cyl sym in', 'loftCylS(vec3(0.3,0.,0.))', -0.5, 4e-3);
+    t('loft cone (lipschitz)', 'loftCone(vec3(.5,1.,0.))', 0.6 * Math.cos(Math.atan(.2)) , 3e-3);
+    t('loft corner', 'loftCyl(vec3(2.,1.,0.))', Math.hypot(1, .5), 4e-3);
+    // noise ranges are tested separately
+    const cyl = (n, r) => Array.from({ length: n }, (_, k) => [r * Math.sin(k / n * Math.PI * 2), r * Math.cos(k / n * Math.PI * 2)]);
+    const half = (n, r) => Array.from({ length: n }, (_, k) => { const a = Math.PI / 2 - k / (n - 1) * Math.PI; return [r * Math.sin(a), r * Math.cos(a)]; });
+    const pre = `
+      vec2 tv[64];
+      float tmpIdx;
+      float testPoly(vec2 p) { ${pent.map((q, i) => `tv[${i}] = vec2(${q[0]}, ${q[1]});`).join(' ')} return sdPolygon2(p, tv, ${pent.length}); }
+      ${PG.sdf.polygonGLSL('tPent', pent)}
+      ${PG.sdf.polygonGLSL('tSq', [[-1, -1], [1, -1], [1, 1], [-1, 1]])}
+      ${PG.sdf.tableGLSL('tab', [0, 1, 4, 9], { x0: 0, x1: 3 })}
+      ${PG.sdf.loftGLSL('loftCyl', [{ x: -1, pts: cyl(32, .5) }, { x: 1, pts: cyl(32, .5) }])}
+      ${PG.sdf.loftGLSL('loftCylS', [{ x: -1, pts: half(17, .5) }, { x: 0.2, pts: half(17, .5) }, { x: 1, pts: half(17, .5) }], { symmetric: true })}
+      ${PG.sdf.loftGLSL('loftCone', [{ x: 0, pts: cyl(64, .5) }, { x: 1, pts: cyl(64, .3) }], { linear: true })}
+    `;
+    const body = T.map((c, i) => `if (id == ${i}) return float(${c.expr});`).join('\n');
+    const glsl = `${pre}\nfloat map(vec3 p) { int id = int(p.x + 0.5); ${body} return -999.0; }`;
+    const pts = new Float32Array(T.length * 3); T.forEach((c, i) => { pts[3 * i] = i; });
+    const out = await PG.sdf.sample(gl, glsl, pts);
+    let fail = 0;
+    T.forEach((c, i) => { const ok = Math.abs(out[i] - c.exp) <= c.tol; if (!ok) { fail++; log(`FAIL ${c.name}: got ${out[i]} expected ${c.exp}  (${c.expr})`); } });
+    // noise / hash statistics
+    const np = new Float32Array(30000); for (let i = 0; i < 10000; i++) { np[3 * i] = (i * 0.37) % 7.1; np[3 * i + 1] = (i * 0.11) % 5.3; np[3 * i + 2] = (i * 0.73) % 3.7; }
+    const nv = await PG.sdf.sample(gl, 'float map(vec3 p){ return vnoise(p*3.7); }', np);
+    const fv = await PG.sdf.sample(gl, 'float map(vec3 p){ return fbm(p*2.,5); }', np);
+    const stat = a => { let mn = 1e9, mx = -1e9, s = 0; for (const x of a) { mn = Math.min(mn, x); mx = Math.max(mx, x); s += x; } return [mn, mx, s / a.length]; };
+    const [a0, a1, am] = stat(nv), [b0, b1, bm] = stat(fv);
+    log(`vnoise range [${a0.toFixed(3)}, ${a1.toFixed(3)}] mean ${am.toFixed(3)}; fbm range [${b0.toFixed(3)}, ${b1.toFixed(3)}] mean ${bm.toFixed(3)}`);
+    if (!(a0 >= 0 && a1 <= 1 && am > .4 && am < .6)) { fail++; log('FAIL vnoise stats'); }
+    if (!(b0 >= 0 && b1 <= 1 && bm > .4 && bm < .6)) { fail++; log('FAIL fbm stats'); }
+    // overloaded / misc lib functions compile-only check (hash, ndot, dot2, sq, saturate)
+    await PG.sdf.sample(gl, 'float map(vec3 p){ return hash11(p.x)+hash13(p)+hash21(p.xy)+hash33(p).x+ndot(p.xy,p.yz)+dot2(p)+dot2(p.xy)+sq(p.x)+saturate(p.y)+sstep5(0.,1.,p.z)+maxChamfer(p.x,p.y,.1)+smaxE(p.x,p.y,4.)+opOnion(p.x,.1)+opRound(p.x,.1)+opElongate(p,vec3(.1)).x+opTwistX(p,1.).x+opTwistZ(p,1.).x+opBendXZ(p,1.).x+opTaperY(p,.1).x+opTaperZ(p,.1).x+opMirrorX(p).x+opMirrorY(p).x+opPolarY(p,5.).x+opRep(p,vec3(1.)).x+sdCappedCone(p,1.,1.,0.)+sdTorus(p,1.,.1); }', new Float32Array([.3, .4, .5]));
+    log(`lib test: ${T.length} value checks, failures: ${fail}`);
+    results.lib = { checks: T.length, failures: fail };
+    if (Q.get('shot') !== '0') { /* nothing to draw */ }
+  };
+
+  // ---- blob: smooth union of ellipsoids, cylinder hole, rounded box
+  const BLOB = `
+    float map(vec3 p) {
+      float d = sdEllipsoid(p, vec3(0.5, 0.3, 0.35));
+      d = smin(d, sdEllipsoid(p - vec3(0.45, 0.05, 0.1), vec3(0.3, 0.2, 0.2)), 0.15);
+      d = smin(d, sdEllipsoid(p - vec3(-0.4, 0.1, -0.1), vec3(0.25, 0.25, 0.3)), 0.15);
+      d = smin(d, sdRoundBox(p - vec3(0.0, -0.32, 0.0), vec3(0.45, 0.07, 0.3), 0.03), 0.06);
+      d = smax(d, -sdCylinderY(p - vec3(0.1, 0.0, 0.05), 0.12), 0.015);
+      d = min(d, sdRoundBox(p - vec3(0.0, 0.45, 0.0), vec3(0.16, 0.05, 0.16), 0.01));   // floating plate above: separate component with sharp edges
+      d = min(d, sdTorus(p - vec3(0.0, -0.05, 0.0) , 0.72, 0.035));                       // thin ring around
+      return d;
+    }`;
+  tests.blob = async () => {
+    const v = +(Q.get('v') || 0.01);
+    const opts = { glsl: BLOB, min: [-0.9, -0.6, -0.6], max: [0.9, 0.6, 0.6], voxel: v, label: 'blob', aoScale: 0.12, newton: Q.has('newton') ? +Q.get('newton') : undefined, sharp: Q.get('sharp') !== '0', qefBias: Q.has('bias') ? +Q.get('bias') : undefined };
+    const m = await PG.sdf.mesh(gl, opts);
+    log('blob ' + fmt(m.stats));
+    results.blob = { stats: m.stats, analysis: analyze(m, 'blob') };
+    results.blob.residual = await residual(m, BLOB, v, 'blob', [opts.min, opts.max]);
+    // no-coarse comparison (validates the empty-space skipping)
+    const m2 = await PG.sdf.mesh(gl, Object.assign({}, opts, { coarse: 0, label: 'blob-nocoarse' }));
+    log('blob (no coarse) ' + fmt(m2.stats));
+    results.blob.sameAsNoCoarse = m2.stats.verts === m.stats.verts && m2.stats.tris === m.stats.tris;
+    log('coarse skipping produces identical vertex/tri counts: ' + results.blob.sameAsNoCoarse);
+    // raw (no refinement) for comparison
+    const m3 = await PG.sdf.mesh(gl, Object.assign({}, opts, { post: false, label: 'blob-raw' }));
+    log('blob (raw surface nets) ' + fmt(m3.stats));
+    if (Q.get('raw') === '1') return show([{ g: upload(m3) }], { az: 35, el: 18, dist: 2.2, t: [0, 0, 0] });
+    show([{ g: upload(m) }], { az: 35, el: 22, dist: 2.3, t: [0, 0, 0] });
+  };
+
+  // ---- thin walls
+  tests.thin = async () => {
+    const v = 0.01;
+    const ts = [0.4, 0.7, 1.0, 1.5, 2.0, 3.0, 4.0];
+    let glsl = 'float map(vec3 p){ float d = 1e9;\n';
+    ts.forEach((t, i) => { glsl += `d = min(d, sdBox(p - vec3(${(i * 0.3 - 0.9).toFixed(3)},0.,0.), vec3(${(t * v / 2).toFixed(5)}, 0.12, 0.12)));\n`; });
+    glsl += 'return d; }';
+    const rep = [];
+    for (const off of [0, 0.5]) {   // off=0.5: plate centred on a grid node (best case); off=0: plate centred mid-cell (worst case)
+      const g = glsl.replace(/vec3\(([-\d.]+),0\.,0\.\), vec3\(/g, (s, x) => `vec3(${(+x + off * v).toFixed(5)},0.,0.), vec3(`);
+      const m = await PG.sdf.mesh(gl, { glsl: g, min: [-1.1, -0.2, -0.2], max: [1.1, 0.2, 0.2], voxel: v, label: 'thin' + off });
+      // per-plate: count vertices with x within plate range and boundary edges
+      const P = m.positions, per = ts.map(() => 0);
+      for (let i = 0; i < P.length; i += 3) { const k = Math.round((P[i] - off * v + 0.9) / 0.3); if (k >= 0 && k < ts.length && Math.abs(P[i] - off * v - (k * 0.3 - 0.9)) < 0.05) per[k]++; }
+      const an = analyze(m, 'thin off=' + off);
+      log(`thin walls, thickness in voxels [${ts.join(', ')}], plate centre ${off ? 'ON a grid node (best case)' : 'MID-CELL (worst case)'}: vertices per plate = [${per.join(', ')}] (0 = plate lost); boundary edges ${an.boundaryEdges}`);
+      rep.push({ off, per, boundary: an.boundaryEdges, verts: m.stats.verts });
+      if (off === 0.5) show([{ g: upload(m) }], { az: 20, el: 25, dist: 2.6, t: [-.15, 0, 0] });
+    }
+    results.thin = rep;
+    log('Interpretation: a wall is only captured if at least one grid node lies inside it: guaranteed for thickness >= 1 voxel, sometimes for less (best case 0.4 voxel). Walls of 1-2 voxels are captured but their two sheets are one cell apart (vertices land on both sides). Design rule: keep every wall >= 2 voxels (3 for reliable shading) or mesh it separately with a smaller voxel.');
+  };
+
+  // ---- car scale benchmark
+  function carGLSL(n) {
+    const r = PG.util.rng(1234), f = x => x.toFixed(3);
+    let g = 'float map(vec3 p0) {\n vec3 p = vec3(p0.x, p0.y, abs(p0.z));\n';
+    g += ' float d = sdEllipsoid(p - vec3(0.0, 0.62, 0.0), vec3(2.3, 0.36, 0.88));\n';
+    g += ' d = smin(d, sdEllipsoid(p - vec3(-0.35, 0.98, 0.0), vec3(1.15, 0.34, 0.62)), 0.25);\n';
+    g += ' d = smin(d, sdEllipsoid(p - vec3(-1.75, 0.85, 0.0), vec3(0.6, 0.28, 0.93)), 0.18);\n';
+    for (const x of [1.2285, -1.2285]) g += ` d = smax(d, -sdCappedCylinderZ(p - vec3(${x}, 0.36, 0.95), 0.42, 0.42), 0.03);\n`;
+    for (let i = 0; i < n; i++) {
+      const x = r() * 4.0 - 2.0, y = 0.3 + r() * 0.9, z = r() * 0.85, sx = 0.05 + r() * 0.22, sy = 0.03 + r() * 0.1, sz = 0.05 + r() * 0.2, kind = i % 4;
+      let prim;
+      if (kind === 0) prim = `sdEllipsoid(p - vec3(${f(x)}, ${f(y)}, ${f(z)}), vec3(${f(sx)}, ${f(sy)}, ${f(sz)}))`;
+      else if (kind === 1) prim = `sdRoundBox(p - vec3(${f(x)}, ${f(y)}, ${f(z)}), vec3(${f(sx)}, ${f(sy)}, ${f(sz)}), 0.02)`;
+      else if (kind === 2) prim = `sdCapsule(p, vec3(${f(x)}, ${f(y)}, ${f(z)}), vec3(${f(x + sx)}, ${f(y + sy)}, ${f(z + sz * 0.5)}), ${f(sy * 0.6)})`;
+      else prim = `sdCappedCylinderY(p - vec3(${f(x)}, ${f(y)}, ${f(z)}), ${f(sz)}, ${f(sy)})`;
+      const isCut = (i % 9) === 8;
+      g += isCut ? ` d = smax(d, -${prim}, 0.02);\n` : ` d = smin(d, ${prim}, 0.06);\n`;
+    }
+    g += ' d = smax(d, -p.y + 0.15, 0.03);\n return d;\n}';
+    return g;
+  }
+  tests.car = async () => {
+    const v = +(Q.get('v') || 0.008), n = +(Q.get('n') || 300);
+    const glsl = carGLSL(n);
+    const opts = { glsl, min: [-2.35, 0.0, -1.0], max: [2.35, 1.4, 1.0], voxel: v, label: 'car', aoScale: 0.2, sharp: Q.get('sharp') !== '0', post: Q.get('post') !== '0', debug: Q.get('dbg') === '1', aoStrength: Q.has('ao') ? +Q.get('ao') : undefined, coarse: Q.has('coarse') ? +Q.get('coarse') : undefined };
+    if (Q.get('dbg') === '1') PG.sdf.debugGL(gl, true);
+    const m = await PG.sdf.mesh(gl, opts);
+    log(`car ${n} prims @${v * 1000}mm: ` + fmt(m.stats));
+    results.car = { stats: m.stats, analysis: analyze(m, 'car') };
+    const t0 = performance.now();
+    const m2 = await PG.sdf.mesh(gl, opts);   // cached programs
+    log(`car repeat (program cache hit): total ${m2.stats.msTotal.toFixed(0)} ms (compile ${m2.stats.msCompile.toFixed(0)})`);
+    results.car.repeat = m2.stats;
+    if (Q.get('nocoarse') === '1') { const m3 = await PG.sdf.mesh(gl, Object.assign({}, opts, { coarse: 0 })); log('car no coarse: ' + fmt(m3.stats)); results.car.nocoarse = m3.stats; }
+    show([{ g: upload(m) }], { az: -35, el: 14, dist: 6.5, t: [0, 0.6, 0] });
+  };
+
+  // ---- loft
+  tests.loft = async () => {
+    const se = (n, a, b, e, cy) => Array.from({ length: n }, (_, k) => { const th = k / n * Math.PI * 2, s = Math.sin(th), c = Math.cos(th); return [cy + a * Math.sign(s) * Math.pow(Math.abs(s), 2 / e), b * Math.sign(c) * Math.pow(Math.abs(c), 2 / e)]; });
+    const N = 14;
+    const stations = [
+      { x: -1.0, pts: se(N, 0.12, 0.18, 2.4, 0.15) },
+      { x: -0.2, pts: se(N, 0.30, 0.55, 3.0, 0.32) },
+      { x: 0.7, pts: se(N, 0.22, 0.40, 2.6, 0.26) },
+    ];
+    const glsl = PG.sdf.loftGLSL('hull', stations, { subdivide: +(Q.get('sub') || 6) }) + '\nfloat map(vec3 p){ return hull(p); }';
+    const v = 0.006;
+    const m = await PG.sdf.mesh(gl, { glsl, min: [-1.15, -0.05, -0.65], max: [0.85, 0.7, 0.65], voxel: v, label: 'loft', normalEps: Q.has('ne') ? +Q.get('ne') : undefined, sharp: Q.get('sharp') !== '0' });
+    log('loft(3 stations) ' + fmt(m.stats));
+    results.loft = { stats: m.stats, analysis: analyze(m, 'loft') };
+    results.loft.residual = await residual(m, glsl, v, 'loft', [[-1.15, -0.05, -0.65], [0.85, 0.7, 0.65]]);
+    // gradient magnitude check of the loft field (Lipschitz quality): sample |grad| near the surface
+    const P = m.positions, K = Math.min(4000, P.length / 3), pts = new Float32Array(K * 3 * 2 * 3), h = 0.002;
+    const sel = []; for (let i = 0; i < K; i++) { const vi = Math.floor(i * (P.length / 3) / K); sel.push(vi); }
+    const q = new Float32Array(K * 6 * 3);
+    sel.forEach((vi, i) => { const x = P[3 * vi], y = P[3 * vi + 1], z = P[3 * vi + 2]; const o = i * 18; [[h, 0, 0], [-h, 0, 0], [0, h, 0], [0, -h, 0], [0, 0, h], [0, 0, -h]].forEach((e, k) => { q[o + 3 * k] = x + e[0]; q[o + 3 * k + 1] = y + e[1]; q[o + 3 * k + 2] = z + e[2]; }); });
+    const dd = await PG.sdf.sample(gl, glsl, q); let gmin = 9, gmax = 0, gs = 0;
+    for (let i = 0; i < K; i++) { const o = i * 6; const g = Math.hypot(dd[o] - dd[o + 1], dd[o + 2] - dd[o + 3], dd[o + 4] - dd[o + 5]) / (2 * h); gmin = Math.min(gmin, g); gmax = Math.max(gmax, g); gs += g; }
+    results.loft.grad = { min: +gmin.toFixed(3), max: +gmax.toFixed(3), mean: +(gs / K).toFixed(3) };
+    log(`loft |grad map| at surface: min ${gmin.toFixed(3)} max ${gmax.toFixed(3)} mean ${(gs / K).toFixed(3)} (1 = exact metric)`);
+    // symmetric-half variant must produce the same surface
+    // symmetric-half variant must describe the same solid as the mirrored full polygon
+    const seHalf = (M, a, b, e, cy) => Array.from({ length: M + 1 }, (_, k) => { const th = Math.PI / 2 - k / M * Math.PI, s = Math.sin(th), c = Math.cos(th); return [cy + a * Math.sign(s) * Math.pow(Math.abs(s), 2 / e), b * Math.abs(c) * Math.pow(Math.abs(c), 2 / e - 1)]; });
+    const halfSt = [[-1.0, 0.12, 0.18, 2.4, 0.15], [-0.2, 0.30, 0.55, 3.0, 0.32], [0.7, 0.22, 0.40, 2.6, 0.26]].map(a => ({ x: a[0], pts: seHalf(8, a[1], a[2], a[3], a[4]) }));
+    const fullSt = halfSt.map(s => ({ x: s.x, pts: s.pts.concat(s.pts.slice(1, s.pts.length - 1).reverse().map(p => [p[0], -p[1]])) }));
+    const gS = PG.sdf.loftGLSL('hs', halfSt, { symmetric: true, subdivide: 4 }), gF = PG.sdf.loftGLSL('hf', fullSt, { subdivide: 4 });
+    const rp = new Float32Array(3 * 3000); for (let i = 0; i < 3000; i++) { rp[3 * i] = -1.1 + 1.9 * ((i * 0.6180339) % 1); rp[3 * i + 1] = -0.1 + 0.7 * ((i * 0.7548776) % 1); rp[3 * i + 2] = -0.7 + 1.4 * ((i * 0.5698402) % 1); }
+    const dS = await PG.sdf.sample(gl, gS + '\nfloat map(vec3 p){ return hs(p); }', rp), dF = await PG.sdf.sample(gl, gF + '\nfloat map(vec3 p){ return hf(p); }', rp);
+    let mxd = 0; for (let i = 0; i < 3000; i++) if (Math.abs(dF[i]) < 0.2) mxd = Math.max(mxd, Math.abs(dS[i] - dF[i]));
+    results.loft.symmetricVsFull = +mxd.toExponential(2); log('loft symmetric-half vs mirrored full polygon: max |d| difference within 0.2 m of the surface = ' + mxd.toExponential(2) + ' m');
+    const ms = await PG.sdf.mesh(gl, { glsl: gS + '\nfloat map(vec3 p){ return hs(p); }', min: [-1.15, -0.05, -0.65], max: [0.85, 0.7, 0.65], voxel: 0.01, label: 'loft-sym' });
+    results.loft.sym = analyze(ms, 'loft-sym');
+    const items = [{ g: upload(m) }];
+    show(items, { az: 40, el: 20, dist: 2.6, t: [-0.15, 0.3, 0] });
+  };
+
+  // ---- attr: user attribute, AO check, sharp box for crease behaviour
+  tests.attr = async () => {
+    const glsl = `float map(vec3 p){ float d = sdBox(p, vec3(0.3,0.2,0.25)); d = min(d, sdBox(p - vec3(0.25,0.15,0.0), vec3(0.15,0.25,0.1))); d = min(d, sdSphere(p - vec3(-0.35,-0.1,0.0), 0.2)); d = max(d, -sdSphere(p - vec3(0.0,0.2,0.0), 0.12)); d = max(d, -sdCylinderY(p - vec3(-0.12,0.,0.14), 0.05)); return d; }`;
+    const attr = `vec4 attr(vec3 p, vec3 n) { return vec4(-5.0, step(0.0, p.x), n.y*.5+.5, sdfAO); }`;
+    const v = 0.008;
+    const m = await PG.sdf.mesh(gl, { glsl, attr, min: [-0.8, -0.5, -0.5], max: [0.8, 0.6, 0.5], voxel: v, label: 'attr', aoScale: 0.12, aoStrength: 1.6, sharp: Q.get('sharp') !== '0', qefEps: Q.has('qe') ? +Q.get('qe') : undefined, qefBias: Q.has('bias') ? +Q.get('bias') : undefined });
+    log('attr ' + fmt(m.stats));
+    let bad = 0, yOK = 0; for (let i = 0; i < m.attrs.length; i += 4) { if (m.attrs[i] < 0 || m.attrs[i] > 1) bad++; if (m.attrs[i + 1] === (m.positions[i / 4 * 3] >= 0 ? 1 : 0)) yOK++; }
+    log(`attr.x within [0,1] except ${bad}; user y matches step(p.x): ${yOK}/${m.attrs.length / 4}`);
+    results.attr = { badAO: bad, userAttrOK: yOK === m.attrs.length / 4, analysis: analyze(m, 'attr') };
+    show([{ g: upload(m) }], { az: 30, el: 25, dist: 1.9, t: [0, 0.05, 0] });
+  };
+
+  // ---- wheel-like part at very fine resolution (1.5 mm): revolve + polar repetition helpers
+  const WHEEL = `
+    float map(vec3 p) {
+      vec2 rz = revolveZ(p);
+      float rim = sdRoundBox2(rz - vec2(0.0, 0.232), vec2(0.115, 0.024), 0.008);
+      rim = max(rim, -sdRoundBox2(rz - vec2(0.0, 0.236), vec2(0.105, 0.016), 0.004));
+      vec3 q = opPolarZ(p, 10.0);
+      float spoke = sdRoundBox(q - vec3(0.125, 0.0, 0.02), vec3(0.115, 0.014 - 0.008 * clamp((q.x - 0.03) / 0.2, 0.0, 1.0), 0.012), 0.004);
+      float hub = sdCappedCylinderZ(p - vec3(0.0, 0.0, 0.028), 0.052, 0.034);
+      hub = smax(hub, -sdCylinderZ(p, 0.026), 0.004);
+      float d = smin(spoke, hub, 0.012);
+      d = smin(d, rim, 0.008);
+      float bolts = sdCylinderZ(opPolarZ(p, 5.0) - vec3(0.038, 0.0, 0.0), 0.005);
+      d = smax(d, -bolts, 0.002);
+      return d;
+    }`;
+  tests.wheel = async () => {
+    const v = +(Q.get('v') || 0.0015);
+    const m = await PG.sdf.mesh(gl, { glsl: WHEEL, min: [-0.26, -0.26, -0.13], max: [0.26, 0.26, 0.13], voxel: v, label: 'wheel', aoScale: 0.04 });
+    log(`wheel @${v * 1000}mm: ` + fmt(m.stats));
+    results.wheel = { stats: m.stats, analysis: analyze(m, 'wheel') };
+    show([{ g: upload(m), color: [0.55, 0.56, 0.6] }], { az: 20, el: 25, dist: 1.2, t: [0, 0, 0] });
+  };
+
+  // ---- robustness: errors, state preservation, progress/yield behaviour, empty volume, noise, meshMany
+  tests.robust = async () => {
+    const R = results.robust = {};
+    // 1. shader compile error must reject (annotated source is printed by PG.glu.program)
+    const realErr = console.error; let errPrinted = 0; console.error = (...a) => { errPrinted++; };
+    try { await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return undefinedFn(p); }', min: [-1, -1, -1], max: [1, 1, 1], voxel: 0.1, label: 'bad' }); R.compileError = 'NOT THROWN'; }
+    catch (e) { R.compileError = 'thrown: ' + String(e.message).slice(0, 60); }
+    console.error = realErr; R.compileErrorPrintedSource = errPrinted > 0;
+    log('compile error test: ' + R.compileError + ' (annotated source printed: ' + R.compileErrorPrintedSource + ')');
+    // 1b. attr compile error
+    console.error = (...a) => { errPrinted++; };
+    try { await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p)-0.3; }', attr: 'vec4 attr(vec3 p, vec3 n){ return vec4(nope); }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.01, label: 'badattr' }); R.attrError = 'NOT THROWN'; }
+    catch (e) { R.attrError = 'thrown: ' + String(e.message).slice(0, 60); }
+    console.error = realErr; log('attr compile error test: ' + R.attrError);
+    // 2. cell cap
+    try { await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p)-1.; }', min: [-5, -5, -5], max: [5, 5, 5], voxel: 0.001, label: 'huge' }); R.cap = 'NOT THROWN'; }
+    catch (e) { R.cap = 'thrown: ' + e.message; }
+    log('cap test: ' + R.cap);
+    // 3. GL state preserved
+    const dummyTex = gl.createTexture(), dummyProg = PG.glu.program(gl, PG.glu.FULLSCREEN_VS, '#version 300 es\nprecision highp float; out vec4 o; void main(){ o = vec4(1); }', 'dummy');
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, dummyTex); gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, dummyTex); gl.activeTexture(gl.TEXTURE5);
+    gl.useProgram(dummyProg); gl.enable(gl.BLEND); gl.enable(gl.DEPTH_TEST); gl.enable(gl.CULL_FACE); gl.viewport(3, 4, 500, 300); gl.disable(gl.SCISSOR_TEST); gl.scissor(1, 2, 30, 40); gl.colorMask(true, false, true, true);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    const snap = () => JSON.stringify([gl.getParameter(gl.CURRENT_PROGRAM) === dummyProg, gl.isEnabled(gl.BLEND), gl.isEnabled(gl.DEPTH_TEST), gl.isEnabled(gl.CULL_FACE), gl.isEnabled(gl.SCISSOR_TEST), Array.from(gl.getParameter(gl.VIEWPORT)), Array.from(gl.getParameter(gl.SCISSOR_BOX)), Array.from(gl.getParameter(gl.COLOR_WRITEMASK)), gl.getParameter(gl.ACTIVE_TEXTURE), gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), gl.getParameter(gl.FRAMEBUFFER_BINDING), gl.getParameter(gl.VERTEX_ARRAY_BINDING), (gl.activeTexture(gl.TEXTURE0), gl.getParameter(gl.TEXTURE_BINDING_2D) === dummyTex), (gl.activeTexture(gl.TEXTURE2), gl.getParameter(gl.TEXTURE_BINDING_2D) === dummyTex), (gl.activeTexture(gl.TEXTURE5), 1)]);
+    const before = snap();
+    await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p)-0.3; }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.01, label: 'state' });
+    const after = snap();
+    R.statePreserved = before === after; log('GL state preserved across mesh(): ' + R.statePreserved); if (!R.statePreserved) log('before ' + before + '\nafter  ' + after);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false); gl.colorMask(true, true, true, true); gl.disable(gl.BLEND); gl.disable(gl.DEPTH_TEST); gl.disable(gl.CULL_FACE); gl.useProgram(null); gl.activeTexture(gl.TEXTURE0);
+    // 4. empty volume
+    const em = await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p)-0.3; }', min: [1, 1, 1], max: [1.5, 1.5, 1.5], voxel: 0.01, label: 'empty' });
+    R.empty = em.positions.length === 0 && em.indices.length === 0; log('empty volume gives empty mesh: ' + R.empty);
+    // 5. progress + event-loop yielding while meshing a heavy volume
+    const prog = []; let maxGap = 0, last = performance.now(), running = true;
+    const ch = new MessageChannel(); ch.port1.onmessage = () => { const t = performance.now(); maxGap = Math.max(maxGap, t - last); last = t; if (running) ch.port2.postMessage(0); }; ch.port2.postMessage(0);
+    const cm = await PG.sdf.mesh(gl, { glsl: carGLSL(120), min: [-2.35, 0, -1], max: [2.35, 1.4, 1], voxel: 0.01, label: 'progress', onProgress: f => prog.push(f) });
+    running = false;
+    let mono = true; for (let i = 1; i < prog.length; i++) if (prog[i] < prog[i - 1] - 1e-9) mono = false;
+    R.progress = { calls: prog.length, monotone: mono, first: +prog[0].toFixed(3), last: prog[prog.length - 1], maxEventLoopGapMs: +maxGap.toFixed(1) };
+    log('progress: ' + JSON.stringify(R.progress) + ' (total ' + cm.stats.msTotal.toFixed(0) + ' ms)');
+    // 6. noise displacement stays well-behaved with sharp mode
+    const nm = await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p) - 0.3 + 0.006 * (fbm(p * 18.0, 3) - 0.5); }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.004, label: 'noise' });
+    R.noise = analyze(nm, 'noise-sphere'); log('noise sphere: ' + fmt(nm.stats));
+    // 6b. concurrent calls on one context are serialised and give identical results
+    const cq = { glsl: 'float map(vec3 p){ return length(p)-0.3; }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.02 };
+    const [c1, c2] = await Promise.all([PG.sdf.mesh(gl, cq), PG.sdf.mesh(gl, cq)]);
+    R.concurrent = c1.stats.verts === c2.stats.verts && c1.positions.every((x, i) => x === c2.positions[i]); log('concurrent mesh() calls identical: ' + R.concurrent);
+    // 7. meshMany
+    const many = await PG.sdf.meshMany(gl, [{ glsl: 'float map(vec3 p){ return length(p)-0.3; }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.02 }, { glsl: 'float map(vec3 p){ return sdBox(p, vec3(0.2)); }', min: [-0.4, -0.4, -0.4], max: [0.4, 0.4, 0.4], voxel: 0.02 }]);
+    R.meshMany = many.map(m => m.stats.verts); log('meshMany vertex counts: ' + R.meshMany);
+    // 8. exact sphere: accuracy of normals / positions vs analytic
+    const sph = await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p){ return length(p - vec3(0.1,0.0,0.0)) - 0.3; }', min: [-0.4, -0.4, -0.4], max: [0.5, 0.4, 0.4], voxel: 0.01, label: 'sphere' });
+    let maxPosErr = 0, maxNErr = 0; for (let i = 0; i < sph.positions.length; i += 3) { const x = sph.positions[i] - 0.1, y = sph.positions[i + 1], z = sph.positions[i + 2], r = Math.hypot(x, y, z); maxPosErr = Math.max(maxPosErr, Math.abs(r - 0.3)); maxNErr = Math.max(maxNErr, Math.hypot(sph.normals[i] - x / r, sph.normals[i + 1] - y / r, sph.normals[i + 2] - z / r)); }
+    R.sphere = { maxPosErrMm: +(maxPosErr * 1000).toFixed(4), maxNormalErr: +maxNErr.toFixed(5), analysis: analyze(sph, 'sphere') };
+    log(`sphere r=300mm @10mm: max radial error ${(maxPosErr * 1000).toFixed(4)} mm, max normal error ${maxNErr.toFixed(5)}`);
+    show([{ g: upload(nm) }], { az: 30, el: 20, dist: 1.6, t: [0, 0, 0] });
+  };
+
+  // ---- overhead floor: trivial SDF in the car-sized volume (measures readback / CPU meshing overhead without map() cost)
+  tests.floor = async () => {
+    const m = await PG.sdf.mesh(gl, { glsl: 'float map(vec3 p) { vec3 q = abs(p - vec3(0.0, 0.7, 0.0)) - vec3(2.2, 0.6, 0.9); return length(max(q, 0.0)) + min(max(q.x, max(q.y, q.z)), 0.0) - 0.05; }', min: [-2.35, 0, -1], max: [2.35, 1.4, 1], voxel: 0.008, label: 'floor' });
+    log('trivial box in car volume: ' + fmt(m.stats)); results.floor = m.stats;
+  };
+
+  function show(items, def) { drawScene(items, camArgs(def)); }
+
+  // ------------------------------------------------------------------------------------------- run
+  try {
+    const which = Q.get('test') || 'blob';
+    const list = which === 'all' ? ['lib', 'blob', 'thin', 'car', 'loft', 'attr', 'wheel', 'robust'] : which.split(',');
+    for (const w of list) { log(`--- test ${w}`); await tests[w](); }
+    let e, errs = 0; while ((e = gl.getError()) !== gl.NO_ERROR && errs++ < 10) { console.error('GL error 0x' + e.toString(16)); results.glError = e; }
+    log(errs ? 'GL ERRORS: ' + errs : 'no GL errors');
+  } catch (e) { console.error('TEST FAILED: ' + (e && e.stack || e)); results.error = String(e); }
+  hud.style.display = Q.get('hud') === '0' ? 'none' : 'block';
+  window.__ready = true;
+})();
+</script>

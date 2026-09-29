@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><title>compile bench</title>
+<script src="../js/core.js"></script>
+<script>
+(async () => {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 16;
+  const gl = c.getContext('webgl2'); gl.getExtension('EXT_color_buffer_float');
+  const NP = +(new URLSearchParams(location.search).get('n') || 300);
+  let body = 'float d = 1e9;\n';
+  for (let i = 0; i < NP; i++) {
+    const a = (i * 0.61803) % 1, b = (i * 0.3819) % 1, cc = (i * 0.7549) % 1;
+    body += `d = smin(d, sdEll(p - vec3(${(a*4-2).toFixed(3)},${(b*1.2+.1).toFixed(3)},${(cc*1.8-.9).toFixed(3)}), vec3(${(.2+a*.4).toFixed(2)},${(.1+b*.2).toFixed(2)},${(.15+cc*.3).toFixed(2)})), 0.1);\n`;
+  }
+  const lib = `float smin(float a,float b,float k){ float h=max(k-abs(a-b),0.)/k; return min(a,b)-h*h*k*.25; }
+  float sdEll(vec3 p, vec3 r){ float k0=length(p/r); float k1=length(p/(r*r)); return k0*(k0-1.)/k1; }
+  float map(vec3 p){ ${body} return d; }`;
+  const variants = {
+    one: `void main(){ vec3 p = vec3(gl_FragCoord.xy,0)*0.01; o = vec4(map(p)); }`,
+    unroll30: `void main(){ vec3 p = vec3(gl_FragCoord.xy,0)*0.01; float s=0.; for(int i=0;i<30;i++){ s+=map(p+vec3(float(i)*0.001,0,0)); } o = vec4(s); }`,
+    loopUniform: `uniform int uN; void main(){ vec3 p = vec3(gl_FragCoord.xy,0)*0.01; float s=0.; for(int i=0;i<uN;i++){ s+=map(p+vec3(float(i)*0.001,0,0)); } o = vec4(s); }`,
+  };
+  const out = [];
+  for (const k in variants) {
+    const fs = `#version 300 es\nprecision highp float; out vec4 o;\n${lib}\n${variants[k]}`;
+    const t0 = performance.now();
+    const pr = PG.glu.program(gl, PG.glu.FULLSCREEN_VS, fs, k);
+    gl.useProgram(pr);
+    gl.getUniformLocation(pr,'x');
+    gl.drawArrays(gl.TRIANGLES,0,3); gl.finish();
+    out.push(`${k}: ${(performance.now()-t0).toFixed(0)}ms`);
+  }
+  console.log(NP + ' prims: ' + out.join(' | ')); window.__ready = true;
+})().catch(e => { console.error('ERR ' + e); window.__ready = true; });
+</script>
